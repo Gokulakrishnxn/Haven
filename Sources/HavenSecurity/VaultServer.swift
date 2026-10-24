@@ -55,7 +55,7 @@ public final class VaultServer: @unchecked Sendable {
         let line = data.split(separator: 0x0A, maxSplits: 1).first.map(Data.init) ?? Data()
 
         let response: WireResponse
-        if let request = try? JSONDecoder().decode(WireRequest.self, from: line), ["login", "approve"].contains(request.action) {
+        if let request = try? JSONDecoder().decode(WireRequest.self, from: line), ["login", "approve", "mac"].contains(request.action) {
             let semaphore = DispatchSemaphore(value: 0)
             var result = WireResponse(ok: false, message: "No answer.")
             Task { result = await handler(request); semaphore.signal() }
@@ -66,7 +66,15 @@ public final class VaultServer: @unchecked Sendable {
         }
         if var out = try? JSONEncoder().encode(response) {
             out.append(0x0A)
-            out.withUnsafeBytes { _ = write(fd, $0.baseAddress, out.count) }
+            // Snapshots can be large, so keep writing until everything is sent.
+            out.withUnsafeBytes { raw in
+                var sent = 0
+                while sent < raw.count {
+                    let n = write(fd, raw.baseAddress! + sent, raw.count - sent)
+                    if n <= 0 { if errno == EINTR { continue } else { break } }
+                    sent += n
+                }
+            }
         }
     }
 }

@@ -74,3 +74,24 @@ import Testing
         #expect(response == WireResponse(ok: true, message: "send the email"))
     }
 }
+
+@Suite struct MacWireTests {
+    @Test func macRequestCarriesCommandAndArgs() throws {
+        let json = #"{"action":"mac","command":"click","args":{"ref":"e5"},"task":"t1"}"#
+        let r = try JSONDecoder().decode(WireRequest.self, from: Data(json.utf8))
+        #expect(r.command == "click")
+        #expect(r.args == ["ref": "e5"])
+        #expect(MacCommand(rawValue: r.command) == .click)
+    }
+
+    @Test func largeResponsesArriveIntact() async throws {
+        let path = "/tmp/hv-\(UUID().uuidString.prefix(8)).sock"
+        let big = String(repeating: "button \"Save\" @1,2 3x4\n", count: 2000)
+        let server = VaultServer(path: path) { _ in WireResponse(ok: true, message: big) }
+        try server.start()
+        defer { server.stop() }
+        let response = VaultClient.send(WireRequest(action: "mac", task: "t", command: "snapshot"), socketPath: path)
+        #expect(response.ok)
+        #expect(response.message == big)
+    }
+}
