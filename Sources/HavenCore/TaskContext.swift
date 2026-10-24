@@ -1,7 +1,7 @@
 import Foundation
 
 /// The active tab of the frontmost browser.
-public struct BrowserTab: Equatable, Sendable {
+public struct BrowserTab: Codable, Equatable, Sendable {
     public var title: String
     public var url: String
 

@@ -26,3 +26,22 @@ import HavenCore
         #expect(JSONFileStore<QuickAction>(url: url).load().isEmpty)
     }
 }
+
+@Suite struct TaskRecordTests {
+    @Test func roundTripsThroughTheStore() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("hist-\(UUID().uuidString).json")
+        let store = JSONFileStore<TaskRecord>(url: url)
+        let record = TaskRecord(id: UUID(), agent: .claudeCode, model: "haiku", instruction: "Summarize", appName: "Safari",
+                                selectedText: "text", tab: BrowserTab(title: "T", url: "https://a.com"), files: ["/tmp/a"],
+                                status: "done", output: "hello", startedAt: Date(timeIntervalSince1970: 1000), finishedAt: Date(timeIntervalSince1970: 1010))
+        store.save([record])
+        #expect(store.load() == [record])
+    }
+
+    @Test func longOutputIsTrimmedFromTheFront() {
+        let long = String(repeating: "a", count: TaskRecord.maxOutput) + "END"
+        let trimmed = TaskRecord.trimmed(long)
+        #expect(trimmed.count == TaskRecord.maxOutput)
+        #expect(trimmed.hasSuffix("END"))
+    }
+}

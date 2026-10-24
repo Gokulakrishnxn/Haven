@@ -54,8 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onChange = { [weak self] in
             guard let self else { return }
             let items = self.store.tasks.map(\.item)
-            self.notch.update(items: items)
-            self.panel.sync(items: items)
+            // The notch and composer reflect this session only; the Task Center and menu show history too.
+            let live = self.store.tasks.filter { !$0.restored }.map(\.item)
+            self.notch.update(items: live)
+            self.panel.sync(items: live)
             self.menuModel.items = items
             if self.outputWindow.window?.isVisible == true { self.outputWindow.reload() }
         }
@@ -172,7 +174,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showTasks() { outputWindow.show() }
     @objc private func showWelcome() { onboarding.show() }
     @objc private func showSettings() { settings.show() }
-    func applicationWillTerminate(_ notification: Notification) { vaultController.stop() }
+    func applicationWillTerminate(_ notification: Notification) {
+        store.persist()
+        vaultController.stop()
+    }
 
     @objc private func quit() { NSApp.terminate(nil) }
 
