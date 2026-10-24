@@ -90,3 +90,45 @@
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Quiet, expressive motion shared by the product and brand page. */
+.haven-mark { overflow: visible; flex-shrink: 0; }
+.haven-mark-body { transform-box: fill-box; transform-origin: center; }
+.haven-mark-eyes, .haven-mark-wave { transform-box: fill-box; transform-origin: center; }
+.haven-mark[data-animated="true"] .haven-mark-body { animation: haven-breathe 4s ease-in-out infinite; }
+.haven-mark[data-animated="true"] .haven-mark-eyes { animation: haven-blink 5.2s ease-in-out infinite; }
+.haven-mark[data-animated="true"] .haven-mark-wave { animation: haven-wave 1.15s ease-in-out infinite; }
+.haven-mark[data-animated="true"] .haven-mark-wave-2 { animation-delay: -0.2s; }
+.haven-mark[data-animated="true"] .haven-mark-wave-3 { animation-delay: -0.4s; }
+.haven-mark[data-animated="true"][data-expression="done"] .haven-mark-body { animation: haven-nod 3.5s ease-in-out infinite; }
+@keyframes haven-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.018, .985); }
+}
+@keyframes haven-blink {
+  0%, 42%, 46%, 100% { transform: scaleY(1); }
+  44% { transform: scaleY(0.12); }
+}
+@keyframes haven-wave {
+  0%, 100% { transform: scaleY(0.6); }
+  50% { transform: scaleY(1.15); }
+}
+@keyframes haven-nod {
+  0%, 20%, 100% { transform: translateY(0) rotate(0); }
+  8% { transform: translateY(-5px) rotate(-3deg); }
+  14% { transform: translateY(1px) rotate(2deg); }
+}
+.haven-home-icon {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 28px;
+  border-radius: 23px;
+  color: #102027;
+  background: radial-gradient(ellipse at 76% 12%, #d5ffff 0%, transparent 34%), radial-gradient(ellipse at 12% 95%, #75f7ff 0%, transparent 44%), linear-gradient(140deg, #1acbff, #15b6e8 55%, #63e6fb);
+  box-shadow: inset 0 1px 2px #ffffff80, 0 9px 28px #00baff18;
+}
+@media (prefers-reduced-motion: reduce) {
+  .haven-mark *, .haven-mark *::before, .haven-mark *::after { animation: none !important; }
+}
