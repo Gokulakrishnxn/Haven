@@ -12,7 +12,10 @@ final class ComposerPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
 
-    init() {
+    private let quickActions: QuickActionStore
+
+    init(quickActions: QuickActionStore) {
+        self.quickActions = quickActions
         super.init(contentRect: NSRect(x: 0, y: 0, width: 620, height: 120),
                    styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered, defer: true)
@@ -40,12 +43,20 @@ final class ComposerPanel: NSPanel {
             self?.onAnnotate?()
         }
         model.onAttach = { [weak self] in self?.chooseFiles() }
+        model.onSaveAction = { [weak self] text, agent, modelID in
+            guard let self else { return }
+            self.quickActions.saveWithPrompt(prompt: text, agent: agent, model: modelID,
+                                             suggestedName: QuickActionStore.suggestedName(for: text))
+            self.model.quickActions = self.quickActions.actions
+            self.makeKeyAndOrderFront(nil)
+        }
     }
 
     func present(context: TaskContext, onSubmit: @escaping (Agent, String?, String, [URL]) -> Void) {
         self.onSubmit = onSubmit
         model.text = ""
         model.files = []
+        model.quickActions = quickActions.actions
         model.agent = Preferences.defaultAgent
         model.model = Preferences.defaultModel
         model.appName = context.appName

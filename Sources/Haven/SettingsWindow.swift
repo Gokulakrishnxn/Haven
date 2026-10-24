@@ -6,6 +6,7 @@ import HavenUI
 /// Settings window hosting the SwiftUI preferences (profile, general, agents, shortcuts, privacy, about).
 final class SettingsWindow: NSWindowController {
     private let store: TaskStore
+    private let quickActions: QuickActionStore
     private let model = SettingsModel(displayName: Preferences.displayName, email: Preferences.email,
                                       agent: Preferences.defaultAgent, showPill: Preferences.showStatusPill,
                                       workingFolder: Preferences.workingFolder)
@@ -13,8 +14,9 @@ final class SettingsWindow: NSWindowController {
     private var loading = false
     var onChange: (() -> Void)?
 
-    init(store: TaskStore) {
+    init(store: TaskStore, quickActions: QuickActionStore) {
         self.store = store
+        self.quickActions = quickActions
         let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model)))
         window.title = "Haven Settings"
         window.styleMask = [.titled, .closable]
@@ -38,6 +40,16 @@ final class SettingsWindow: NSWindowController {
                 NSWorkspace.shared.open(url)
             }
         }
+        model.quickActions = quickActions.actions
+        model.onUpdateAction = { [weak self] action in self?.quickActions.update(action) }
+        model.onDeleteAction = { [weak self] id in
+            self?.quickActions.delete(id)
+            self?.model.quickActions = self?.quickActions.actions ?? []
+        }
+        model.onAddAction = { [weak self] in
+            self?.quickActions.add(QuickAction(name: "New action", prompt: ""))
+            self?.model.quickActions = self?.quickActions.actions ?? []
+        }
         model.onClearHistory = { [weak self] in self?.store.clearFinished() }
         model.onOpenRepo = {
             if let url = URL(string: "https://github.com/Gokulakrishnxn/Haven") { NSWorkspace.shared.open(url) }
@@ -57,6 +69,7 @@ final class SettingsWindow: NSWindowController {
     }
 
     private func refresh() {
+        if model.quickActions != quickActions.actions { model.quickActions = quickActions.actions }
         model.accessibilityGranted = AXIsProcessTrusted()
         model.screenRecordingGranted = CGPreflightScreenCaptureAccess()
         model.taskCount = store.startedCount

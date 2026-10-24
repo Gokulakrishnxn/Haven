@@ -6,11 +6,12 @@ import HavenUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = TaskStore()
-    private let panel = ComposerPanel()
+    private let quickActions = QuickActionStore()
+    private lazy var panel = ComposerPanel(quickActions: quickActions)
     private var statusItem: NSStatusItem!
     private var composeKey: HotKey?
     private var annotateKey: HotKey?
-    private lazy var outputWindow = OutputWindow(store: store)
+    private lazy var outputWindow = OutputWindow(store: store, quickActions: quickActions)
     private lazy var notch = NotchPanel(
         onAsk: { [weak self] in self?.showComposer() },
         onAnnotate: { [weak self] in self?.toggleAnnotate() },
@@ -23,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return w
     }()
     private lazy var settings: SettingsWindow = {
-        let w = SettingsWindow(store: store)
+        let w = SettingsWindow(store: store, quickActions: quickActions)
         w.onChange = { [weak self] in
             guard let self else { return }
             self.notch.update(items: self.store.tasks.map(\.item))
