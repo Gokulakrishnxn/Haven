@@ -21,12 +21,19 @@ public struct AgentRequest: Sendable {
     /// Model id for the agent, or nil for its default.
     public var model: String?
     public var workingDirectory: URL?
+    /// Extra environment variables for the agent process.
+    public var environment: [String: String]
+    /// Shell commands the agent may run without asking, by name, for example "haven-vault".
+    public var allowedCommands: [String]
     /// Seconds before the run is stopped. nil means no limit.
     public var timeout: TimeInterval?
 
-    public init(prompt: String, model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval? = 3600) {
+    public init(prompt: String, model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval? = 3600,
+                environment: [String: String] = [:], allowedCommands: [String] = []) {
         self.prompt = prompt
         self.model = model
+        self.environment = environment
+        self.allowedCommands = allowedCommands
         self.workingDirectory = workingDirectory
         self.timeout = timeout
     }

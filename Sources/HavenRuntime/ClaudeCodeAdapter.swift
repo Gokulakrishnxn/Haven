@@ -66,6 +66,10 @@ public struct ClaudeCodeAdapter: AgentAdapter {
     public func arguments(for request: AgentRequest) -> [String] {
         var args = ["-p", "--output-format", "stream-json", "--verbose"]
         if let model = request.model { args += ["--model", model] }
+        if !request.allowedCommands.isEmpty {
+            // --allowedTools is variadic and would swallow the prompt, so end options with "--".
+            args += ["--allowedTools"] + request.allowedCommands.map { "Bash(\($0):*)" } + ["--"]
+        }
         return args
     }
 
