@@ -1,7 +1,7 @@
 // Haven browser bridge.
 //
 // Connects to the Haven app on this Mac (ws://127.0.0.1:48731) and carries out page-level commands for
-// agents: list tabs, navigate, snapshot, click, type, select, scroll, extract text, screenshot.
+// agents: list tabs, navigate, snapshot, click, type, select, scroll, extract text.
 //
 // Safety:
 //  - Haven only talks to this extension after the pairing token matches.
@@ -13,6 +13,8 @@ const PORT = 48731;
 const VERSION = "0.1.0";
 let socket = null;
 let pingTimer = null;
+let retryDelay = 1000;
+let retryTimer = null;
 
 async function connect() {
   if (socket && socket.readyState <= WebSocket.OPEN) return;
@@ -32,7 +34,7 @@ async function connect() {
   socket.onmessage = async (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
-    if (msg.type === "welcome") return setStatus("Connected to Haven.");
+    if (msg.type === "welcome") { retryDelay = 1000; return setStatus("Connected to Haven."); }
     if (msg.type === "rejected") return setStatus("Haven rejected the pairing code. Copy it again from Haven > Settings > Browser.");
     if (!msg.id || !msg.cmd) return;
     let result;
@@ -40,7 +42,15 @@ async function connect() {
     catch (e) { result = { ok: false, message: String(e && e.message || e) }; }
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ id: msg.id, ...result }));
   };
-  socket.onclose = () => { clearInterval(pingTimer); socket = null; setStatus("Waiting for Haven."); };
+  socket.onclose = () => {
+    clearInterval(pingTimer);
+    socket = null;
+    setStatus("Waiting for Haven.");
+    // Retry quickly at first, then back off. The alarm below is the fallback if the worker was asleep.
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(connect, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 15000);
+  };
   socket.onerror = () => {};
 }
 
@@ -109,6 +119,7 @@ async function handle(cmd, args) {
       return { ok: true, message: lines.join("\n") || "No tabs." };
     }
     case "open-tab": {
+      if (!isWeb(args.url)) return ONLY_WEB;
       if (!(await connected(args.url || ""))) return { ok: false, message: NOT_CONNECTED(hostOf(args.url)) };
       const tab = await chrome.tabs.create({ url: args.url, active: true });
       return { ok: true, message: `Opened tab id=${tab.id}.` };
@@ -126,6 +137,7 @@ async function handle(cmd, args) {
     }
     case "navigate": {
       const tab = await targetTab(args);
+      if (!isWeb(args.url)) return ONLY_WEB;
       if (!(await connected(args.url || ""))) return { ok: false, message: NOT_CONNECTED(hostOf(args.url)) };
       await chrome.tabs.update(tab.id, { url: args.url });
       await waitForLoad(tab.id);
@@ -144,19 +156,19 @@ async function handle(cmd, args) {
     case "type": return pageResult(await run(await allowedTab(args), typeFn, [args.ref, args.text ?? "", args.append === "true"]));
     case "select": return pageResult(await run(await allowedTab(args), selectFn, [args.ref, args.value ?? ""]));
     case "scroll": return pageResult(await run(await allowedTab(args), scrollFn, [Number(args.dy) || 0, args.ref || null]));
-    case "screenshot": {
-      const tab = await allowedTab(args);
-      await chrome.tabs.update(tab.id, { active: true });
-      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-      return { ok: true, message: "Screenshot taken.", image: dataUrl.split(",")[1] };
-    }
     default:
       return { ok: false, message: `Unknown browser command ${cmd}.` };
   }
 }
 
-function hostOf(url) { try { return new URL(url).host; } catch { return "That address"; } }
-function pageResult(r) { return r && r.error ? { ok: false, message: r.error } : { ok: true, message: (r && r.message) || "Done." }; }
+function hostOf(url) { try { return new URL(url).host || "That address"; } catch { return "That address"; } }
+function isWeb(url) { try { return /^https?:$/.test(new URL(url).protocol); } catch { return false; } }
+const ONLY_WEB = { ok: false, message: "Only http and https pages can be opened." };
+function pageResult(r) {
+  // An injected function that throws gives back nothing at all; never report that as success.
+  if (r === undefined || r === null) return { ok: false, message: "The page could not run that command. It may have changed or blocked scripts. Take a new snapshot and try again." };
+  return r.error ? { ok: false, message: r.error } : { ok: true, message: r.message || "Done." };
+}
 
 function waitForLoad(tabId, timeout = 15000) {
   return new Promise((resolve) => {
@@ -212,10 +224,10 @@ function extractFn() {
   return `Page: ${document.title} (${location.href})\n\n` + (text.length > 20000 ? text.slice(0, 20000) + "\n… (truncated)" : text);
 }
 
-function findRef(ref) { return document.querySelector(`[data-haven-ref="${CSS.escape(String(ref))}"]`); }
+// Each function below runs inside the page on its own, so it cannot use helpers from this file.
 
 function clickFn(ref) {
-  const el = findRef(ref);
+  const el = document.querySelector(`[data-haven-ref="${String(ref).replace(/[^a-zA-Z0-9_-]/g, "")}"]`);
   if (!el) return { error: `Unknown reference ${ref}. Take a new snapshot first; references change each time.` };
   el.scrollIntoView({ block: "center" });
   el.click();
@@ -223,7 +235,7 @@ function clickFn(ref) {
 }
 
 function typeFn(ref, text, append) {
-  const el = findRef(ref);
+  const el = document.querySelector(`[data-haven-ref="${String(ref).replace(/[^a-zA-Z0-9_-]/g, "")}"]`);
   if (!el) return { error: `Unknown reference ${ref}. Take a new snapshot first.` };
   if (el.type === "password" || /password/i.test(el.autocomplete || "")) {
     return { error: "Refusing to type into a password field. Use haven-vault login instead." };
@@ -244,7 +256,7 @@ function typeFn(ref, text, append) {
 }
 
 function selectFn(ref, value) {
-  const el = findRef(ref);
+  const el = document.querySelector(`[data-haven-ref="${String(ref).replace(/[^a-zA-Z0-9_-]/g, "")}"]`);
   if (!el || el.tagName !== "SELECT") return { error: `${ref} is not a dropdown. Take a new snapshot.` };
   const option = [...el.options].find((o) => o.value === value || o.text.trim() === value);
   if (!option) return { error: `No option "${value}". Options: ${[...el.options].map((o) => o.text.trim()).slice(0, 20).join(", ")}` };
@@ -255,7 +267,7 @@ function selectFn(ref, value) {
 }
 
 function scrollFn(dy, ref) {
-  const target = ref ? findRef(ref) : null;
+  const target = ref ? document.querySelector(`[data-haven-ref="${String(ref).replace(/[^a-zA-Z0-9_-]/g, "")}"]`) : null;
   if (ref && !target) return { error: `Unknown reference ${ref}.` };
   (target || window).scrollBy ? (target || window).scrollBy(0, -dy * 40) : window.scrollBy(0, -dy * 40);
   return { message: `Scrolled ${dy} lines.` };
