@@ -157,6 +157,15 @@ swift run
 
 A house icon appears in the menu bar. Press **⌥Space** to open the composer.
 
+## Documentation and Site
+
+| Resource | Location |
+|---|---|
+| Product requirements | [`docs/prd.md`](docs/prd.md) |
+| Delivery plan | [`docs/plan.md`](docs/plan.md) |
+| Architecture and design | [`docs/design.md`](docs/design.md) |
+| Landing site (Next.js) | [`site/`](site/): `cd site && npm install && npm run dev` |
+
 ## Repository and Branching
 
 | Branch | Purpose |
@@ -174,3 +183,5 @@ Work lands on `design` or `features` and reaches `main` only through a pull requ
 3. **Keychain secure fill** with Touch ID and an audit log.
 4. **Parallel task management**, Quick Actions and Workflows.
 5. **MCP servers and skills** attached per task.
+
+Detailed milestones are in [`docs/plan.md`](docs/plan.md).
