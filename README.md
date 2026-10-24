@@ -51,8 +51,13 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Annotate mode: hover highlight, element and region pins, notes, brief | Implemented (element identity needs Accessibility; no screenshot yet) |
 | Onboarding, agent detection, Settings | Implemented |
 | Chrome extension for DOM selectors | Planned |
-| Persistence, approvals, audit log | Planned |
-| Keychain secure fill with Touch ID | Planned |
+| Quick Actions: save a prompt, rerun in one step from the composer, save from a finished task, manage in Settings | Implemented |
+| Browser tab as context (Chrome, Arc, Brave, Edge, Safari) | Implemented, not yet verified against a live browser; needs Automation permission |
+| Saved logins in Keychain, Touch ID before every fill, origin check, verified-field fill | Implemented (pipeline and Keychain tested; live fill into a real login page not yet verified) |
+| `haven-vault` helper agents run to request a login without seeing it | Implemented; verified end to end up to the approval step |
+| Audit log of every credential access (hash-chained, verifiable in Settings) | Implemented |
+| Haven-hosted credits | Not available (no hosted service exists) |
+| Persistence of task history, per-action approval policy | Planned |
 | MCP and skills per task | Planned |
 
 ## System Architecture
@@ -137,6 +142,22 @@ Screens are SwiftUI, hosted in AppKit panels and windows. The shell stays AppKit
 
 Development aid: launch with `HAVEN_SHOW=composer|tasks|onboarding|settings` to open a window at start, and `HAVEN_RUN="prompt"` to start a task with the default agent.
 
+### Quick Actions
+
+Save a prompt that worked (from the composer's bolt menu, or **Save as Action** on a finished task), then run it again in one step. Actions remember their agent and model, run with whatever context is current (app, selection, browser tab, attached files), and are managed under Settings > Quick Actions. They are stored as JSON in Application Support.
+
+### Secure sign-in
+
+```
+agent ── haven-vault login --site github.com --field password ──▶ unix socket (0600)
+                                                                      │
+        Haven: running task? ─▶ saved login? ─▶ page is https://github.com? ─▶ Touch ID
+                                                                      │
+        Accessibility: focused field is a password field? ─▶ type value ─▶ audit entry
+                                                                      │
+agent ◀── "Filled the password field." (no value, ever) ─────────────┘
+```
+
 ### Annotate flow
 
 1. ⌥⇧Space dims every display lightly. Hovering highlights the element under the pointer.
@@ -170,9 +191,12 @@ HavenTask
 Haven runs agents that can act on your machine, so the boundaries matter.
 
 - **Permissions are opt-in.** Selected-text capture needs Accessibility; Haven only prompts when the user chooses "Enable Selected-Text Context…".
-- **No credentials handled.** Haven does not read or store passwords. Planned Keychain fill will keep values out of model context.
+- **Passwords never enter model context.** Saved logins live in the macOS Keychain. An agent can only run `haven-vault login --site <host> --field username|password --reason "<why>"`, which has no way to carry a credential value in either direction. Haven checks that the page in front is an https page on exactly that site, asks for Touch ID (with password fallback) naming the site and task, confirms through Accessibility that the focused field is the right kind of field, and types the value as key events (never the clipboard).
+- **Only running tasks may ask.** The helper's socket is private to the user (mode 0600, same-user peers only), and a request must carry the ID of a task that is currently running.
+- **Every access leaves an audit trail.** Each request, approved, denied or refused, is appended to a hash-chained log with the credential name, site, task and reason, never the value. Settings verifies the chain and flags edits or deletions.
+- **Honest limits.** Touch ID is enforced by Haven, not by a Keychain access-control entry (unsigned builds cannot use those). A process running as you could read the Keychain item with your approval. Origin is read from the browser's active tab, so it is only as trustworthy as that browser's scripting interface.
 - **Untrusted content is data.** Selected text is passed as context, but page or document content must never be treated as instructions. This is a design requirement for future browser and annotation features.
-- **Approvals.** Sensitive actions will require explicit user approval (planned).
+- **Approvals.** Credential use is approved per use. Broader approvals for writing, sending and deleting are planned.
 - **Local-first.** Haven has no server component and sends nothing itself; data goes only to the agent CLI the user selects.
 
 ## Getting Started
@@ -218,7 +242,7 @@ Work lands on `design` or `features` and reaches `main` only through a pull requ
 
 1. **Notch-integrated status UI** and persistence of task history.
 2. **Chrome extension and region screenshots** for annotation: DOM selector, role and text from the page, plus a cropped screenshot (needs Screen Recording). Integration with the `agentation-mcp` server is planned. Agentation is licensed under PolyForm Shield, so Haven will use its own capture layer and integrate only through the MCP interface.
-3. **Keychain secure fill** with Touch ID and an audit log.
+3. **Verify secure fill against real login pages**, add a per-action approval policy, and persist task history.
 4. **Parallel task management**, Quick Actions and Workflows.
 5. **MCP servers and skills** attached per task.
 
