@@ -1,4 +1,5 @@
 import AppKit
+import HavenCore
 
 /// Task Center: task list on the left; header, context and live output on the right.
 final class OutputWindow: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {

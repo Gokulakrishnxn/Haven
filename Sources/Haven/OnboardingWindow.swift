@@ -1,4 +1,5 @@
 import AppKit
+import HavenCore
 
 /// Three skippable steps (docs/design.md §19): shortcut, agents, permissions.
 final class OnboardingWindow: NSWindowController {

@@ -1,15 +1,6 @@
 import AppKit
 import ApplicationServices
-
-/// What the user was looking at when they invoked Haven.
-struct TaskContext {
-    var appName: String?
-    var selectedText: String?
-    /// Markdown brief built from Annotate-mode pins.
-    var brief: String?
-
-    var isEmpty: Bool { appName == nil && selectedText == nil && brief == nil }
-}
+import HavenCore
 
 enum ContextCapture {
     /// Call before showing the composer, while the previous app is still frontmost.
