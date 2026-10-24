@@ -157,7 +157,9 @@ struct OutputView: View {
 struct EmptyState: View {
     var body: some View {
         VStack(spacing: 10) {
-            Image(systemName: "house.circle").font(.system(size: 40)).foregroundStyle(.tertiary)
+            HavenLogo()
+                .foregroundStyle(.tertiary)
+                .frame(width: 52, height: 52)
             Text("No tasks yet").font(.title3.weight(.semibold))
             HStack(spacing: 4) {
                 Text("Press"); KeyHint("⌥Space", "to start one")

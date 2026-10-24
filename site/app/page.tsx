@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Code2, Globe, Laptop, Layers, Plug, BookOpen, Fingerprint, KeyRound, EyeOff, CornerDownLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,6 +57,7 @@ export default function Home() {
 
       <main id="top">
         <section className="mx-auto max-w-5xl px-6 pb-16 pt-20 text-center md:pt-24">
+          <div className="haven-home-icon" aria-hidden="true"><HavenMark className="size-16" animated /></div>
           <p className={eyebrow}>Introducing Haven</p>
           <h1 className="text-5xl font-bold leading-[1.02] md:text-8xl">
             Point at anything.<br />
@@ -209,6 +211,7 @@ export default function Home() {
         <span className="flex gap-6">
           <a className="hover:text-foreground" href="#security">Security</a>
           <a className="hover:text-foreground" href="#faq">FAQ</a>
+          <Link className="hover:text-foreground" href="/brand">Brand</Link>
           <a className="hover:text-foreground" href={REPO}>GitHub</a>
         </span>
       </footer>
