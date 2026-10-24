@@ -38,17 +38,19 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Menu-bar app, no Dock icon | Implemented |
 | Global shortcuts: ⌥Space (ask), ⌥⇧Space (annotate) | Implemented |
 | Context capture: frontmost app and selected text | Implemented (selected text needs Accessibility) |
-| Composer with remembered agent, ⌘↩ to start another task | Implemented |
-| Agent picker: Claude Code, Codex, Grok | Implemented (Codex and Grok flags unverified) |
+| Composer: agent and model menus with icons, drag or pick files to attach, annotate button, ⌘↩ to start another task | Implemented |
+| Agents: Claude, Cursor, Codex, Grok | Claude verified (including `--model` aliases); Cursor, Codex and Grok flags unverified |
 | Background tasks with live streamed output, cancel, rerun | Implemented |
 | Structured events from Claude Code (`stream-json`), process-group cancel and timeout | Implemented, with tests |
 | Structured events from Codex and Grok | Planned (plain text for now) |
-| Status pill (running count, last result) | Implemented |
+| Notch bar: wraps the notch (or sits at top center), expands to live output of the latest task plus Ask, Annotate and Tasks actions | Implemented |
+| Menu-bar panel with profile, quick actions and recent tasks | Implemented |
+| Settings: Profile, General (default agent, working folder, notch bar), Agents, Shortcuts, Privacy, About | Implemented |
+| Welcome screen with the Haven logo | Implemented |
 | Task Center (SwiftUI split view, header actions, live output) | Implemented |
 | Annotate mode: hover highlight, element and region pins, notes, brief | Implemented (element identity needs Accessibility; no screenshot yet) |
 | Onboarding, agent detection, Settings | Implemented |
 | Chrome extension for DOM selectors | Planned |
-| Notch-integrated status UI | Planned |
 | Persistence, approvals, audit log | Planned |
 | Keychain secure fill with Touch ID | Planned |
 | MCP and skills per task | Planned |
@@ -109,7 +111,7 @@ The package is split into four targets plus tests.
 |---|---|---|
 | `HavenCore` | `Sources/HavenCore/` | Pure domain types: `Agent`, `TaskContext`, `TaskEvent`, `Outcome`, `AgentRequest`, `Pin`, `BriefBuilder`. No I/O. |
 | `HavenRuntime` | `Sources/HavenRuntime/` | `ProcessSupervisor` (process groups, cancel, timeout), `AgentAdapter` and output parsers, `ClaudeCodeAdapter` (structured `stream-json`), `AgentRunner`, `AgentRegistry` |
-| `HavenUI` | `Sources/HavenUI/` | SwiftUI components and screens (composer, status pill, Task Center, onboarding, settings). Depends only on `HavenCore`; screens render plain data and call closures, so they never touch processes |
+| `HavenUI` | `Sources/HavenUI/` | SwiftUI components and screens (composer, notch bar, menu-bar panel, Task Center, onboarding, settings). Depends only on `HavenCore`; screens render plain data and call closures, so they never touch processes |
 | `Haven` | `Sources/Haven/` | The app shell: hotkeys, context capture, Annotate overlay (AppKit), task store, and AppKit hosts for the SwiftUI screens |
 | `HavenRuntimeTests` | `Tests/HavenRuntimeTests/` | Parser contract tests against a recorded Claude Code run, and supervisor tests |
 
