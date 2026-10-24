@@ -62,6 +62,9 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Approval: agents run `haven-vault approve` before risky actions; an approval card appears and the answer is audited (120 s timeout counts as Deny) | Implemented; verified end to end with a real Claude task (Allow path via a dev flag) |
 | Custom global shortcuts with a recorder in Settings | Implemented (record UI not yet tried by hand) |
 | MCP servers (command or web address) enabled in Settings are passed to Claude tasks | Implemented; Claude confirmed loading the config; no real server tried |
+| Packaged `.app` with helpers and the Chrome extension inside, version from `VERSION`, ad-hoc signed; Developer ID signing supported by the script | Implemented; built and run from the bundle (a real Claude task used the bundled helper); notarization not done |
+| Update check against GitHub releases (daily, can be turned off, never installs) | Implemented; the live request was made and correctly reported no releases yet |
+| Release and CI workflows on GitHub Actions | Written, not yet run |
 | Mac control for agents with `haven-mac`: snapshot, click, type, key, scroll, list and open apps | Implemented; verified end to end (a real Claude task opened Calculator, read it and clicked a button) |
 | Chrome extension for page-level control (`haven-browser`: snapshot, extract text, click, type, select, scroll, tabs), paired with a code, per-site consent in Chrome, loopback-only bridge | Implemented; verified end to end in Brave (a real Claude task filled and submitted a form and was refused on a password field); not tried in Chrome itself |
 | Per-action approval policy (auto-allow classes) | Planned |
@@ -248,7 +251,7 @@ Haven runs agents that can act on your machine, so the boundaries matter.
 - **Honest limits.** Touch ID is enforced by Haven, not by a Keychain access-control entry (unsigned builds cannot use those). A process running as you could read the Keychain item with your approval. Origin is read from the browser's active tab, so it is only as trustworthy as that browser's scripting interface.
 - **Untrusted content is data.** Selected text is passed as context, but page or document content must never be treated as instructions. This is a design requirement for future browser and annotation features.
 - **Approvals.** Credential use is approved per use. Broader approvals for writing, sending and deleting are planned.
-- **Local-first.** Haven has no server component and sends nothing itself; data goes only to the agent CLI the user selects.
+- **Local-first.** Haven has no server component. Data goes only to the agent CLI the user selects, and the one request Haven makes itself is an optional once-a-day check of GitHub's latest release (no information about you is sent; it can be turned off in Settings > About).
 
 ## Getting Started
 
@@ -276,7 +279,7 @@ Haven’s soft H companion appears in the menu bar, welcome screen, Task Center,
 
 - [Brand assets and usage](brand/README.md): SVG logos and wordmarks, four app-icon variants, animated SVG/GIF, PNGs, and macOS ICNS/iconset.
 - Live logo and motion preview: run the landing site and open `/brand`.
-- Build a local app with its Finder icon: `scripts/build-app.sh` → `.build/Haven.app`. See [packaging](docs/packaging.md).
+- Build the app: `scripts/build-app.sh` → `.build/Haven.app`, which includes the helper commands and the Chrome extension. See [packaging and releases](docs/packaging.md).
 
 ## Documentation and Site
 
