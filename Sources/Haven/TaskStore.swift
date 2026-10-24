@@ -42,6 +42,10 @@ final class HavenTask: ObservableObject, Identifiable {
 /// One failing task never affects another.
 final class TaskStore: ObservableObject {
     @Published private(set) var tasks: [HavenTask] = []
+    /// Extra prompt text and environment for agents, supplied by the app (for example how to request a login).
+    var loginNote: (() -> String?)?
+    var helperDirectory: String?
+
     /// Called on the main thread whenever a task is added, changes status, or produces output.
     var onChange: (() -> Void)?
 
@@ -56,7 +60,16 @@ final class TaskStore: ObservableObject {
         tasks.insert(task, at: 0)
         startedCount += 1
 
-        let request = AgentRequest(prompt: task.prompt, model: model, workingDirectory: Preferences.workingFolderURL)
+        var prompt = task.prompt
+        var environment = ["HAVEN_TASK_ID": task.id.uuidString]
+        var allowed: [String] = []
+        if let note = loginNote?() {
+            prompt += "\n\n" + note
+            allowed = ["haven-vault"]
+            if let dir = helperDirectory { environment["HAVEN_HELPER_DIR"] = dir }
+        }
+        let request = AgentRequest(prompt: prompt, model: model, workingDirectory: Preferences.workingFolderURL,
+                                   environment: environment, allowedCommands: allowed)
         let run = AgentRunner.launch(AgentRegistry.adapter(for: agent), request: request)
         task.run = run
         Task { @MainActor [weak self, weak task] in

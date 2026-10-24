@@ -21,7 +21,7 @@ enum ContextCapture {
 
     /// Reads the front window's active tab through Apple Events. macOS asks for Automation
     /// permission the first time, per browser; if it is declined the tab is simply omitted.
-    private static func browserTab(of app: NSRunningApplication) -> BrowserTab? {
+    static func browserTab(of app: NSRunningApplication) -> BrowserTab? {
         guard let id = app.bundleIdentifier, let isSafari = browsers[id] else { return nil }
         let source = isSafari
             ? "tell application id \"\(id)\" to return (URL of current tab of front window) & linefeed & (name of current tab of front window)"

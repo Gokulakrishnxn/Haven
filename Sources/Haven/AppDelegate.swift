@@ -7,6 +7,7 @@ import HavenUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = TaskStore()
     private let quickActions = QuickActionStore()
+    private lazy var vaultController = VaultController(store: store)
     private lazy var panel = ComposerPanel(quickActions: quickActions)
     private var statusItem: NSStatusItem!
     private var composeKey: HotKey?
@@ -24,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return w
     }()
     private lazy var settings: SettingsWindow = {
-        let w = SettingsWindow(store: store, quickActions: quickActions)
+        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController)
         w.onChange = { [weak self] in
             guard let self else { return }
             self.notch.update(items: self.store.tasks.map(\.item))
@@ -64,6 +65,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         panel.onAnnotate = { [weak self] in self?.toggleAnnotate() }
+        store.loginNote = { [weak self] in
+            (self?.vaultController.hasLogins ?? false) ? VaultController.agentNote : nil
+        }
+        store.helperDirectory = Bundle.main.executableURL?.deletingLastPathComponent().path
+        vaultController.start()
         notch.update(items: [])
         if !Preferences.onboarded { onboarding.show() }
 
@@ -129,6 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showTasks() { outputWindow.show() }
     @objc private func showWelcome() { onboarding.show() }
     @objc private func showSettings() { settings.show() }
+    func applicationWillTerminate(_ notification: Notification) { vaultController.stop() }
+
     @objc private func quit() { NSApp.terminate(nil) }
 
     // MARK: Menu-bar panel
