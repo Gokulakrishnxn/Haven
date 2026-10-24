@@ -43,14 +43,14 @@ public struct NotchView: View {
     public var body: some View {
         VStack(spacing: 0) {
             collapsedBar
-            if model.expanded { expandedBody.transition(.opacity) }
+            if model.expanded { expandedBody.padding(.horizontal, Self.flare).transition(.opacity) }
         }
         .frame(width: width)
         .fixedSize(horizontal: width == nil, vertical: false)
         .background(Color.black)
-        .clipShape(NotchShape(bottomRadius: model.expanded ? 26 : 16, flare: Self.flare))
+        .clipShape(NotchShape(bottomRadius: model.expanded ? 22 : 16, flare: Self.flare))
         // A hairline keeps the bar readable against dark wallpapers where there is no physical notch.
-        .overlay(NotchShape(bottomRadius: model.expanded ? 26 : 16, flare: Self.flare)
+        .overlay(NotchShape(bottomRadius: model.expanded ? 22 : 16, flare: Self.flare)
             .stroke(Color.white.opacity(model.hasNotch ? 0 : 0.14), lineWidth: 1))
         .foregroundStyle(.white)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: model.expanded)
@@ -64,7 +64,7 @@ public struct NotchView: View {
     /// Fixed width around a physical notch (a short wing each side, wider when there is status text),
     /// or content-sized for the compact pill.
     private var width: CGFloat? {
-        if model.expanded { return 440 }
+        if model.expanded { return 340 }
         guard model.hasNotch else { return nil }
         let wing: CGFloat = model.pill == nil ? 46 : 112
         return model.notchWidth + 2 * (wing + Self.flare)
@@ -77,15 +77,17 @@ public struct NotchView: View {
     private var collapsedBar: some View {
         Button { model.expanded.toggle() } label: {
             HStack(spacing: 8) {
-                WorkingMark(working: working, size: 18)
+                WorkingMark(working: working, size: 16)
                 if model.hasNotch { Spacer(minLength: model.notchWidth) }
-                if let pill = model.pill {
+                if model.expanded {
+                    Spacer(minLength: 0)
+                } else if let pill = model.pill {
                     Text(pill.text).font(.system(size: 12, weight: .medium)).lineLimit(1)
                     if !model.hasNotch { StatusDot(pill.state) }
                 } else if !model.hasNotch {
                     Text("Haven").font(.system(size: 12, weight: .medium)).opacity(0.85)
                 }
-                if model.hasNotch == false || model.pill == nil {
+                if model.expanded || !model.hasNotch || model.pill == nil {
                     Image(systemName: model.expanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .bold)).opacity(0.55)
                 }
@@ -100,18 +102,18 @@ public struct NotchView: View {
     }
 
     private var expandedBody: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             if let task = model.latest { taskOutput(task) } else {
-                Text("No tasks yet. Ask something, or point at what you mean.")
-                    .font(.callout).foregroundStyle(.white.opacity(0.6))
-                    .padding(.horizontal, 16).padding(.top, 4)
+                Text("No tasks yet.")
+                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
+                    .padding(.horizontal, 16)
             }
             HStack(spacing: 8) {
                 NotchAction(icon: "plus.bubble", title: "Ask", action: { collapse(); model.onAsk() })
                 NotchAction(icon: "scope", title: "Annotate", prominent: true, action: { collapse(); model.onAnnotate() })
                 NotchAction(icon: "list.bullet", title: "Tasks", action: { collapse(); model.onShowTasks() })
             }
-            .padding(.horizontal, 12).padding(.bottom, 14)
+            .padding(.horizontal, 10).padding(.bottom, 10)
         }
     }
 
@@ -120,30 +122,30 @@ public struct NotchView: View {
     private func taskOutput(_ task: TaskItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                AgentIcon(task.agent, size: 16)
-                Text(task.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                AgentIcon(task.agent, size: 14)
+                Text(task.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
                 Spacer()
-                StatusDot(task.state)
-                Text(task.state.rawValue).font(.system(size: 11)).foregroundStyle(.white.opacity(0.65))
+                StatusDot(task.state, size: 6)
+                Text(task.state.rawValue).font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.65))
             }
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(task.output.isEmpty ? (task.state == .working ? "Working…" : "No output.") : task.output)
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.white.opacity(task.output.isEmpty ? 0.5 : 0.92))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
+                        .padding(8)
                     Color.clear.frame(height: 1).id("end")
                 }
-                .frame(height: 170)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                .frame(height: 104)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                 .onChange(of: task.output) { _ in
                     if task.state == .working { proxy.scrollTo("end", anchor: .bottom) }
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
     }
 }
 
@@ -156,9 +158,9 @@ struct NotchAction: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: icon)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, 5)
                 .background(prominent ? Color.accentColor : Color.white.opacity(0.12), in: Capsule())
         }
         .buttonStyle(.plain)
@@ -207,14 +209,15 @@ public struct WorkingMark: View {
             let moving = working && !reduceMotion
             let hop = moving ? -abs(sin(t * 3.4)) * size * 0.14 : 0
             let glow = moving ? (sin(t * 2.4) + 1) / 2 : 0
-            ZStack {
-                Circle()
-                    .fill(RadialGradient(colors: [Color.accentColor.opacity(0.55 * glow), .clear],
-                                         center: .center, startRadius: 0, endRadius: size * 0.95))
-                    .frame(width: size * 2, height: size * 2)
-                HavenLogo(animated: working)
-            }
-            .frame(width: size, height: size)
+            HavenLogo(animated: working)
+                .frame(width: size, height: size)
+                .background(
+                    // Drawn as a background so the glow never changes the mark's layout size.
+                    Circle()
+                        .fill(RadialGradient(colors: [Color.accentColor.opacity(0.55 * glow), .clear],
+                                             center: .center, startRadius: 0, endRadius: size * 0.95))
+                        .frame(width: size * 2, height: size * 2)
+                )
             .offset(y: hop)
         }
         .frame(width: size, height: size)
