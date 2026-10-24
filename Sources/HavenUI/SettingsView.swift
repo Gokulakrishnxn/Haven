@@ -125,7 +125,7 @@ public struct SettingsView: View {
             .formStyle(.grouped)
             .navigationTitle(model.section.rawValue)
         }
-        .frame(width: 700, height: 480)
+        .frame(width: 700, height: 560)
     }
 }
 
