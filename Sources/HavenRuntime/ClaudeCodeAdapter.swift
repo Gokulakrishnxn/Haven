@@ -66,10 +66,17 @@ public struct ClaudeCodeAdapter: AgentAdapter {
     public func arguments(for request: AgentRequest) -> [String] {
         var args = ["-p", "--output-format", "stream-json", "--verbose"]
         if let model = request.model { args += ["--model", model] }
+        var variadic = false
         if !request.allowedCommands.isEmpty {
-            // --allowedTools is variadic and would swallow the prompt, so end options with "--".
-            args += ["--allowedTools"] + request.allowedCommands.map { "Bash(\($0):*)" } + ["--"]
+            args += ["--allowedTools"] + request.allowedCommands.map { "Bash(\($0):*)" }
+            variadic = true
         }
+        if let path = request.mcpConfigPath {
+            args += ["--mcp-config", path]
+            variadic = true
+        }
+        // These options are variadic and would swallow the prompt, so end options with "--".
+        if variadic { args.append("--") }
         return args
     }
 

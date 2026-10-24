@@ -3,14 +3,29 @@ import Foundation
 /// Messages between an agent's helper command and the app, one JSON object per line.
 /// There is no field for a credential value in either direction.
 public struct WireRequest: Codable, Sendable {
+    /// "login" asks for a credential fill; "approve" asks the person to allow an action.
     public var action: String
     public var site: String
     public var field: FillField
     public var reason: String
     public var task: String
+    /// For "approve": one line saying what the agent wants to do.
+    public var summary: String
 
-    public init(action: String = "login", site: String, field: FillField, reason: String, task: String) {
-        self.action = action; self.site = site; self.field = field; self.reason = reason; self.task = task
+    public init(action: String = "login", site: String = "", field: FillField = .password, reason: String = "",
+                task: String, summary: String = "") {
+        self.action = action; self.site = site; self.field = field; self.reason = reason; self.task = task; self.summary = summary
+    }
+
+    // Missing fields fall back to defaults so each action only sends what it needs.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        action = try c.decode(String.self, forKey: .action)
+        site = try c.decodeIfPresent(String.self, forKey: .site) ?? ""
+        field = try c.decodeIfPresent(FillField.self, forKey: .field) ?? .password
+        reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
     }
 }
 

@@ -25,15 +25,18 @@ public struct AgentRequest: Sendable {
     public var environment: [String: String]
     /// Shell commands the agent may run without asking, by name, for example "haven-vault".
     public var allowedCommands: [String]
+    /// Path of an MCP config file to hand to the agent, if it supports one.
+    public var mcpConfigPath: String?
     /// Seconds before the run is stopped. nil means no limit.
     public var timeout: TimeInterval?
 
     public init(prompt: String, model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval? = 3600,
-                environment: [String: String] = [:], allowedCommands: [String] = []) {
+                environment: [String: String] = [:], allowedCommands: [String] = [], mcpConfigPath: String? = nil) {
         self.prompt = prompt
         self.model = model
         self.environment = environment
         self.allowedCommands = allowedCommands
+        self.mcpConfigPath = mcpConfigPath
         self.workingDirectory = workingDirectory
         self.timeout = timeout
     }

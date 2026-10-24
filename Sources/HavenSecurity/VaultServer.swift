@@ -55,7 +55,7 @@ public final class VaultServer: @unchecked Sendable {
         let line = data.split(separator: 0x0A, maxSplits: 1).first.map(Data.init) ?? Data()
 
         let response: WireResponse
-        if let request = try? JSONDecoder().decode(WireRequest.self, from: line), request.action == "login" {
+        if let request = try? JSONDecoder().decode(WireRequest.self, from: line), ["login", "approve"].contains(request.action) {
             let semaphore = DispatchSemaphore(value: 0)
             var result = WireResponse(ok: false, message: "No answer.")
             Task { result = await handler(request); semaphore.signal() }

@@ -50,3 +50,27 @@ import Testing
         #expect(reply.contains("\"ok\":false"))
     }
 }
+
+@Suite struct WireRequestTests {
+    @Test func approveRequestNeedsOnlyItsOwnFields() throws {
+        let json = #"{"action":"approve","summary":"delete the file","reason":"cleanup","task":"t1"}"#
+        let r = try JSONDecoder().decode(WireRequest.self, from: Data(json.utf8))
+        #expect(r.action == "approve")
+        #expect(r.summary == "delete the file")
+        #expect(r.site == "")
+        #expect(r.field == .password)
+    }
+
+    @Test func requestWithoutActionIsRejected() {
+        #expect(throws: (any Error).self) { try JSONDecoder().decode(WireRequest.self, from: Data(#"{"site":"a.com"}"#.utf8)) }
+    }
+
+    @Test func serverPassesApproveRequestsToTheHandler() async throws {
+        let path = "/tmp/hv-\(UUID().uuidString.prefix(8)).sock"
+        let server = VaultServer(path: path) { r in WireResponse(ok: r.action == "approve", message: r.summary) }
+        try server.start()
+        defer { server.stop() }
+        let response = VaultClient.send(WireRequest(action: "approve", reason: "r", task: "t", summary: "send the email"), socketPath: path)
+        #expect(response == WireResponse(ok: true, message: "send the email"))
+    }
+}

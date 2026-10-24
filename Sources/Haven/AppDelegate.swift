@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = TaskStore()
     private let quickActions = QuickActionStore()
     private lazy var vaultController = VaultController(store: store)
+    private let mcpStore = MCPStore()
     private lazy var panel = ComposerPanel(quickActions: quickActions)
     private var statusItem: NSStatusItem!
     private var composeKey: HotKey?
@@ -25,11 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return w
     }()
     private lazy var settings: SettingsWindow = {
-        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController)
+        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController, mcp: mcpStore)
         w.onChange = { [weak self] in
             guard let self else { return }
             self.notch.update(items: self.store.tasks.map(\.item))
             self.menuModel.name = Preferences.displayName
+            self.registerHotKeys()
         }
         return w
     }()
@@ -54,18 +56,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onChange = { [weak self] in
             guard let self else { return }
             let items = self.store.tasks.map(\.item)
-            self.notch.update(items: items)
-            self.panel.sync(items: items)
+            // The notch and composer reflect this session only; the Task Center and menu show history too.
+            let live = self.store.tasks.filter { !$0.restored }.map(\.item)
+            self.notch.update(items: live)
+            self.panel.sync(items: live)
             self.menuModel.items = items
             if self.outputWindow.window?.isVisible == true { self.outputWindow.reload() }
         }
 
-        composeKey = HotKey(id: 1, keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey)) { [weak self] in
-            self?.showComposer()
-        }
-        annotateKey = HotKey(id: 2, keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey | shiftKey)) { [weak self] in
-            self?.toggleAnnotate()
-        }
+        registerHotKeys()
 
         panel.onAnnotate = { [weak self] in self?.toggleAnnotate() }
         panel.onStop = { [weak self] id in
@@ -82,9 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                              instruction: action?.prompt ?? "Explain this clearly and concisely.", context: context)
         }
         selectionPopup.start()
-        store.loginNote = { [weak self] in
-            (self?.vaultController.hasLogins ?? false) ? VaultController.agentNote : nil
-        }
+        store.loginNote = { [weak self] in VaultController.agentNote(hasLogins: self?.vaultController.hasLogins ?? false) }
+        store.mcpConfigPath = { [weak self] id in self?.mcpStore.configPath(for: id) }
         store.helperDirectory = Bundle.main.executableURL?.deletingLastPathComponent().path
         vaultController.start()
         notch.update(items: [])
@@ -137,6 +135,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// (Re)registers the global shortcuts from preferences. Replacing an instance unregisters the old key.
+    private func registerHotKeys() {
+        let c = Preferences.composeShortcut, a = Preferences.annotateShortcut
+        composeKey = nil
+        annotateKey = nil
+        composeKey = HotKey(id: 1, keyCode: c.keyCode, modifiers: c.modifiers) { [weak self] in self?.showComposer() }
+        if a != c {
+            annotateKey = HotKey(id: 2, keyCode: a.keyCode, modifiers: a.modifiers) { [weak self] in self?.toggleAnnotate() }
+        }
+    }
+
     // MARK: Actions
 
     @objc private func showComposer() { showComposer(with: nil) }
@@ -172,7 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showTasks() { outputWindow.show() }
     @objc private func showWelcome() { onboarding.show() }
     @objc private func showSettings() { settings.show() }
-    func applicationWillTerminate(_ notification: Notification) { vaultController.stop() }
+    func applicationWillTerminate(_ notification: Notification) {
+        store.persist()
+        vaultController.stop()
+    }
 
     @objc private func quit() { NSApp.terminate(nil) }
 
