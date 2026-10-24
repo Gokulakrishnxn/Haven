@@ -20,6 +20,7 @@ extension HavenTask {
         var parts: [String] = []
         if let app = c.appName { parts.append("From \(app)") }
         if let t = c.selectedText { parts.append("“\(t.prefix(120))”") }
+        if !c.files.isEmpty { parts.append(c.files.count == 1 ? "1 file" : "\(c.files.count) files") }
         if c.brief != nil { parts.append("With annotations") }
         return parts.joined(separator: " · ")
     }

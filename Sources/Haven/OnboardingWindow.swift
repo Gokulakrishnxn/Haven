@@ -18,6 +18,9 @@ final class OnboardingWindow: NSWindowController {
         window.center()
         super.init(window: window)
 
+        if let url = Bundle.module.url(forResource: "HavenAppIcon", withExtension: "png") {
+            model.appIcon = NSImage(contentsOf: url)
+        }
         model.onGrantAccessibility = { ContextCapture.requestAccessibility() }
         model.onFinish = { [weak self] in
             Preferences.onboarded = true

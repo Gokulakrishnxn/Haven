@@ -1,15 +1,20 @@
 import AppKit
+import SwiftUI
 import Carbon.HIToolbox
 import HavenCore
+import HavenUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = TaskStore()
     private let panel = ComposerPanel()
     private var statusItem: NSStatusItem!
     private var composeKey: HotKey?
     private var annotateKey: HotKey?
     private lazy var outputWindow = OutputWindow(store: store)
-    private lazy var pill = StatusPill { [weak self] in self?.outputWindow.show() }
+    private lazy var notch = NotchPanel(
+        onAsk: { [weak self] in self?.showComposer() },
+        onAnnotate: { [weak self] in self?.toggleAnnotate() },
+        onShowTasks: { [weak self] in self?.showTasks() })
     private lazy var annotate = AnnotateController { [weak self] agent, text, pins in
         self?.startAnnotated(agent: agent, instruction: text, pins: pins)
     }
@@ -18,25 +23,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return w
     }()
     private lazy var settings: SettingsWindow = {
-        let w = SettingsWindow()
+        let w = SettingsWindow(store: store)
         w.onChange = { [weak self] in
             guard let self else { return }
-            self.pill.update(tasks: self.store.tasks)
+            self.notch.update(items: self.store.tasks.map(\.item))
+            self.menuModel.name = Preferences.displayName
         }
         return w
     }()
+    private let menuModel = MenuPanelModel()
+    private let popover = NSPopover()
     private var annotateAppName: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let iconURL = Bundle.module.url(forResource: "HavenAppIcon", withExtension: "png"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApp.applicationIconImage = icon
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "house.circle", accessibilityDescription: "Haven")
-        let menu = NSMenu()
-        menu.delegate = self
-        statusItem.menu = menu
+        statusItem.button?.image = HavenBrand.menuBarImage
+        statusItem.button?.setAccessibilityLabel("Haven")
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusItemClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        configureMenuPanel()
 
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.pill.update(tasks: self.store.tasks)
+            self.notch.update(items: self.store.tasks.map(\.item))
+            self.menuModel.items = self.store.tasks.map(\.item)
             if self.outputWindow.window?.isVisible == true { self.outputWindow.reload() }
         }
 
@@ -47,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.toggleAnnotate()
         }
 
+        panel.onAnnotate = { [weak self] in self?.toggleAnnotate() }
+        notch.update(items: [])
         if !Preferences.onboarded { onboarding.show() }
 
         // Development aid: HAVEN_SHOW=composer|tasks|onboarding|settings opens that window at launch.
@@ -54,11 +71,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let prompt = ProcessInfo.processInfo.environment["HAVEN_RUN"] {
             store.start(agent: Preferences.defaultAgent, instruction: prompt, context: TaskContext())
         }
+        // HAVEN_SNAP=dir writes a PNG of each visible Haven window after two seconds, then quits.
+        if let dir = ProcessInfo.processInfo.environment["HAVEN_SNAP"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + (Double(ProcessInfo.processInfo.environment["HAVEN_SNAP_DELAY"] ?? "") ?? 2.5)) {
+                for (i, w) in NSApp.windows.enumerated() where w.isVisible {
+                    guard let view = w.contentView?.superview ?? w.contentView,
+                          let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: dir).appendingPathComponent("window-\(i).png"))
+                }
+                NSApp.terminate(nil)
+            }
+        }
         switch ProcessInfo.processInfo.environment["HAVEN_SHOW"] {
         case "composer": showComposer()
         case "tasks": outputWindow.show()
         case "onboarding": onboarding.show()
         case "settings": settings.show()
+        case "panel": statusItemClicked()
         default: break
         }
     }
@@ -68,8 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func showComposer() {
         guard !annotate.isActive else { return }
         let context = ContextCapture.capture()
-        panel.present(context: context) { [store] agent, text in
-            store.start(agent: agent, instruction: text, context: context)
+        panel.present(context: context) { [store] agent, model, text, files in
+            var ctx = context
+            ctx.files = files.map(\.path)
+            store.start(agent: agent, model: model, instruction: text, context: ctx)
         }
     }
 
@@ -84,36 +117,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var context = TaskContext()
         context.appName = pins.first?.app ?? annotateAppName
         context.brief = BriefBuilder.markdown(pins: pins)
-        store.start(agent: agent, instruction: instruction, context: context)
+        store.start(agent: agent, model: Preferences.defaultAgent == agent ? Preferences.defaultModel : nil,
+                    instruction: instruction, context: context)
     }
 
     @objc private func showTasks() { outputWindow.show() }
     @objc private func showWelcome() { onboarding.show() }
     @objc private func showSettings() { settings.show() }
-    @objc private func enableContext() { ContextCapture.requestAccessibility() }
     @objc private func quit() { NSApp.terminate(nil) }
 
-    // MARK: Menu (rebuilt on open so status is current)
+    // MARK: Menu-bar panel
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        func item(_ title: String, _ action: Selector, key: String = "") {
-            menu.addItem(withTitle: title, action: action, keyEquivalent: key).target = self
-        }
-        item("New Task…      ⌥Space", #selector(showComposer))
-        item("Annotate…      ⌥⇧Space", #selector(toggleAnnotate))
-        item("Show Tasks…", #selector(showTasks))
+    private func configureMenuPanel() {
+        menuModel.name = Preferences.displayName
+        menuModel.onNewTask = { [weak self] in self?.closePanel(); self?.showComposer() }
+        menuModel.onAnnotate = { [weak self] in self?.closePanel(); self?.toggleAnnotate() }
+        menuModel.onShowTasks = { [weak self] in self?.closePanel(); self?.showTasks() }
+        menuModel.onSelectTask = { [weak self] _ in self?.closePanel(); self?.showTasks() }
+        menuModel.onSettings = { [weak self] in self?.closePanel(); self?.showSettings() }
+        menuModel.onQuit = { NSApp.terminate(nil) }
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(rootView: MenuPanelView(model: menuModel))
+    }
 
-        if !store.tasks.isEmpty {
-            menu.addItem(.separator())
-            for task in store.tasks.prefix(6) {
-                menu.addItem(withTitle: "\(task.status.rawValue)  \(task.instruction.prefix(40))", action: nil, keyEquivalent: "")
-            }
+    private func closePanel() { popover.performClose(nil) }
+
+    /// Left click opens the panel; right click shows a minimal Quit menu.
+    @objc private func statusItemClicked() {
+        guard let button = statusItem.button else { return }
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            let menu = NSMenu()
+            menu.addItem(withTitle: "Quit Haven", action: #selector(quit), keyEquivalent: "q").target = self
+            statusItem.menu = menu
+            button.performClick(nil)
+            statusItem.menu = nil
+        } else if popover.isShown {
+            closePanel()
+        } else {
+            menuModel.items = store.tasks.map(\.item)
+            NSApp.activate(ignoringOtherApps: true)
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
-        menu.addItem(.separator())
-        if !AXIsProcessTrusted() { item("Enable Accessibility…", #selector(enableContext)) }
-        item("Welcome…", #selector(showWelcome))
-        item("Settings…", #selector(showSettings), key: ",")
-        item("Quit Haven", #selector(quit), key: "q")
     }
 }

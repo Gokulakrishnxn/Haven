@@ -7,6 +7,7 @@ final class HavenTask: ObservableObject, Identifiable {
 
     let id = UUID()
     let agent: Agent
+    let model: String?
     let instruction: String
     let context: TaskContext
     let startedAt = Date()
@@ -15,8 +16,9 @@ final class HavenTask: ObservableObject, Identifiable {
     @Published var status: Status = .working
     @Published var output = ""
 
-    init(agent: Agent, instruction: String, context: TaskContext) {
+    init(agent: Agent, model: String?, instruction: String, context: TaskContext) {
         self.agent = agent
+        self.model = model
         self.instruction = instruction
         self.context = context
     }
@@ -27,6 +29,9 @@ final class HavenTask: ObservableObject, Identifiable {
         var parts = [instruction]
         if let app = context.appName { parts.append("Context app: \(app)") }
         if let text = context.selectedText { parts.append("Selected text:\n\(text)") }
+        if !context.files.isEmpty {
+            parts.append("Attached files (read them as needed):\n" + context.files.map { "- \($0)" }.joined(separator: "\n"))
+        }
         if let brief = context.brief { parts.append(brief) }
         return parts.joined(separator: "\n\n")
     }
@@ -39,14 +44,19 @@ final class TaskStore: ObservableObject {
     /// Called on the main thread whenever a task is added, changes status, or produces output.
     var onChange: (() -> Void)?
 
+    /// Tasks started since launch.
+    private(set) var startedCount = 0
+
     var runningCount: Int { tasks.filter { $0.status == .working }.count }
 
     @discardableResult
-    func start(agent: Agent, instruction: String, context: TaskContext) -> HavenTask {
-        let task = HavenTask(agent: agent, instruction: instruction, context: context)
+    func start(agent: Agent, model: String? = nil, instruction: String, context: TaskContext) -> HavenTask {
+        let task = HavenTask(agent: agent, model: model, instruction: instruction, context: context)
         tasks.insert(task, at: 0)
+        startedCount += 1
 
-        let run = AgentRunner.launch(AgentRegistry.adapter(for: agent), request: AgentRequest(prompt: task.prompt))
+        let request = AgentRequest(prompt: task.prompt, model: model, workingDirectory: Preferences.workingFolderURL)
+        let run = AgentRunner.launch(AgentRegistry.adapter(for: agent), request: request)
         task.run = run
         Task { @MainActor [weak self, weak task] in
             for await event in run.events {
@@ -64,7 +74,7 @@ final class TaskStore: ObservableObject {
     }
 
     func rerun(_ task: HavenTask) {
-        start(agent: task.agent, instruction: task.instruction, context: task.context)
+        start(agent: task.agent, model: task.model, instruction: task.instruction, context: task.context)
     }
 
     func clearFinished() {
