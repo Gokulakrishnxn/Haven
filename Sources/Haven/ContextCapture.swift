@@ -35,7 +35,7 @@ enum ContextCapture {
 
     /// Reads the focused element's selection through Accessibility. Returns nil
     /// (without prompting) when permission has not been granted.
-    private static func selectedText(in app: NSRunningApplication) -> String? {
+    static func selectedText(in app: NSRunningApplication) -> String? {
         guard AXIsProcessTrusted() else { return nil }
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var focused: CFTypeRef?

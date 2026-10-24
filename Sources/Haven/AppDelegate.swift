@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return w
     }()
+    private let selectionPopup = SelectionPopup()
     private let menuModel = MenuPanelModel()
     private let popover = NSPopover()
     private var annotateAppName: String?
@@ -52,8 +53,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.notch.update(items: self.store.tasks.map(\.item))
-            self.menuModel.items = self.store.tasks.map(\.item)
+            let items = self.store.tasks.map(\.item)
+            self.notch.update(items: items)
+            self.panel.sync(items: items)
+            self.menuModel.items = items
             if self.outputWindow.window?.isVisible == true { self.outputWindow.reload() }
         }
 
@@ -65,6 +68,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         panel.onAnnotate = { [weak self] in self?.toggleAnnotate() }
+        panel.onStop = { [weak self] id in
+            if let task = self?.store.tasks.first(where: { $0.id == id }) { self?.store.cancel(task) }
+        }
+        panel.onOpenTasks = { [weak self] in self?.showTasks() }
+        selectionPopup.quickActions = { [weak self] in self?.quickActions.actions ?? [] }
+        selectionPopup.onChat = { [weak self] context in self?.showComposer(with: context) }
+        selectionPopup.onRun = { [weak self] action, context in
+            guard let self else { return }
+            let agent = action?.agent ?? Preferences.defaultAgent
+            let model = action.map { $0.agent == nil ? Preferences.defaultModel : $0.model } ?? Preferences.defaultModel
+            self.store.start(agent: agent, model: agent == Preferences.defaultAgent ? model : nil,
+                             instruction: action?.prompt ?? "Explain this clearly and concisely.", context: context)
+        }
+        selectionPopup.start()
         store.loginNote = { [weak self] in
             (self?.vaultController.hasLogins ?? false) ? VaultController.agentNote : nil
         }
@@ -76,7 +93,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Development aid: HAVEN_SHOW=composer|tasks|onboarding|settings opens that window at launch.
         // HAVEN_RUN="prompt" also starts a task with the default agent.
         if let prompt = ProcessInfo.processInfo.environment["HAVEN_RUN"] {
-            store.start(agent: Preferences.defaultAgent, instruction: prompt, context: TaskContext())
+            if ProcessInfo.processInfo.environment["HAVEN_SHOW"] == "composer" {
+                showComposer()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.panel.debugSubmit(prompt) }
+            } else {
+                store.start(agent: Preferences.defaultAgent, instruction: prompt, context: TaskContext())
+            }
         }
         // HAVEN_SNAP=dir writes a PNG of each visible Haven window after two seconds, then quits.
         if let dir = ProcessInfo.processInfo.environment["HAVEN_SNAP"] {
@@ -104,27 +126,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { NSApp.terminate(nil) }
         }
         switch ProcessInfo.processInfo.environment["HAVEN_SHOW"] {
-        case "composer": showComposer()
+        case "composer": if ProcessInfo.processInfo.environment["HAVEN_RUN"] == nil { showComposer() }
         case "tasks": outputWindow.show()
         case "onboarding": onboarding.show()
         case "settings": settings.show()
         case "panel": statusItemClicked()
         case "annotate": toggleAnnotate()
+        case "selection": selectionPopup.debugShow()
         default: break
         }
     }
 
     // MARK: Actions
 
-    @objc private func showComposer() {
+    @objc private func showComposer() { showComposer(with: nil) }
+
+    private func showComposer(with preset: TaskContext?) {
         guard !annotate.isActive else { return }
-        let context = ContextCapture.capture()
+        let context = preset ?? ContextCapture.capture()
         panel.present(context: context) { [store] submission in
             var ctx = context
             ctx.selectedText = submission.selection
             ctx.tab = submission.tab
             ctx.files = submission.files.map(\.path)
-            store.start(agent: submission.agent, model: submission.model, instruction: submission.text, context: ctx)
+            return store.start(agent: submission.agent, model: submission.model, instruction: submission.text, context: ctx).id
         }
     }
 
