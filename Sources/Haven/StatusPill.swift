@@ -8,13 +8,7 @@ final class StatusPill: NSPanel {
 
     override var canBecomeKey: Bool { false }
 
-    static func color(for status: HavenTask.Status) -> NSColor {
-        switch status {
-        case .working: return .systemOrange
-        case .done: return .systemGreen
-        case .failed: return .systemRed
-        }
-    }
+    static func color(for status: HavenTask.Status) -> NSColor { Theme.color(for: status) }
 
     init(onClick: @escaping () -> Void) {
         self.onClick = onClick
@@ -61,7 +55,7 @@ final class StatusPill: NSPanel {
 
     /// Hidden when there are no tasks; otherwise shows running count or the last result.
     func update(tasks: [HavenTask]) {
-        guard let latest = tasks.first else { orderOut(nil); return }
+        guard let latest = tasks.first, Preferences.showStatusPill else { orderOut(nil); return }
         let running = tasks.filter { $0.status == .working }.count
         if running > 0 {
             label.stringValue = running == 1 ? "1 task working" : "\(running) tasks working"

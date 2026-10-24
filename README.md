@@ -36,15 +36,18 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Capability | State |
 |---|---|
 | Menu-bar app, no Dock icon | Implemented |
-| Global shortcut (⌥Space) opens composer | Implemented |
-| Context capture: frontmost app and selected text | Implemented (selected text needs Accessibility permission) |
+| Global shortcuts: ⌥Space (ask), ⌥⇧Space (annotate) | Implemented |
+| Context capture: frontmost app and selected text | Implemented (selected text needs Accessibility) |
+| Composer with remembered agent, ⌘↩ to start another task | Implemented |
 | Agent picker: Claude Code, Codex, Grok | Implemented (Codex and Grok flags unverified) |
-| Background task execution, one process per task | Implemented |
-| Task status in the menu bar | Implemented |
-| Task output viewer (list and detail window) | Implemented |
-| Floating status pill (running count, last result) | Implemented |
+| Background tasks with live streamed output, cancel, rerun | Implemented |
+| Status pill (running count, last result) | Implemented |
+| Task Center (sidebar, header actions, live output) | Implemented |
+| Annotate mode: hover highlight, element and region pins, notes, brief | Implemented (element identity needs Accessibility; no screenshot yet) |
+| Onboarding, agent detection, Settings | Implemented |
+| Chrome extension for DOM selectors | Planned |
 | Notch-integrated status UI | Planned |
-| Browser annotation (Agentation-style) | Planned |
+| Persistence, approvals, audit log | Planned |
 | Keychain secure fill with Touch ID | Planned |
 | MCP and skills per task | Planned |
 
@@ -108,10 +111,19 @@ All sources live in `Sources/Haven/`.
 | Context capture | `ContextCapture.swift` | Reads the frontmost app, and the focused element's selected text via the Accessibility API when trusted |
 | Composer | `ComposerPanel.swift` | Borderless floating `NSPanel` with context chip, agent picker and input; Return submits, Esc closes |
 | Task engine | `TaskStore.swift` | `Agent` command mapping, `HavenTask` model and state, background process execution, and an `onChange` callback for UI updates |
+| Annotate | `AnnotateOverlay.swift`, `ElementProbe.swift`, `Brief.swift` | Full-screen overlay per display; hit-tests the window under the pointer and its Accessibility element; collects numbered pins and notes; builds a markdown and JSON brief that labels captured content as untrusted data |
+| Onboarding and settings | `OnboardingWindow.swift`, `SettingsWindow.swift`, `AgentDetector.swift`, `Preferences.swift` | First-run steps, installed-CLI detection, default agent and pill toggle |
+| Design tokens | `Theme.swift` | Shared fonts, radii, status colors and vibrancy helper |
 | Status pill | `StatusPill.swift` | Non-activating floating pill at top-center showing running count or last result; click opens the output window |
-| Output window | `OutputWindow.swift` | Split view: task list with status on the left, selected task's output on the right |
+| Task Center | `OutputWindow.swift` | Source-list sidebar of tasks, header with status, elapsed time and Cancel or Run Again, and live output |
 
 The UI is plain AppKit, so the project builds with the Xcode Command Line Tools alone (SwiftUI macros require full Xcode).
+
+### Annotate flow
+
+1. ⌥⇧Space dims every display lightly. Hovering highlights the element under the pointer.
+2. Click pins an element; drag pins a region. Each pin is numbered and takes a short note.
+3. Return sends the instruction plus all pins as one brief to the chosen agent. ⌫ removes the last pin; ⎋ exits.
 
 ### Task model
 
@@ -132,7 +144,7 @@ HavenTask
 4. User picks an agent, types an instruction, presses Return.
 5. `TaskStore` builds a prompt (instruction, app name, selected text) and spawns the agent CLI through a login shell.
 6. The composer closes. The task runs in the background; the status pill shows the running count and the menu lists recent tasks.
-7. Clicking the pill (or **Show Tasks…** in the menu) opens the output window.
+7. Clicking the pill (or **Show Tasks…** in the menu) opens the Task Center, where output streams live.
 8. On exit, the task becomes `done` (exit code 0) or `failed`, and its output is stored on the task.
 
 ## Security Model
@@ -157,6 +169,15 @@ swift run
 
 A house icon appears in the menu bar. Press **⌥Space** to open the composer.
 
+## Documentation and Site
+
+| Resource | Location |
+|---|---|
+| Product requirements | [`docs/prd.md`](docs/prd.md) |
+| Delivery plan | [`docs/plan.md`](docs/plan.md) |
+| Architecture and design | [`docs/design.md`](docs/design.md) |
+| Landing site (Next.js) | [`site/`](site/): `cd site && npm install && npm run dev` |
+
 ## Repository and Branching
 
 | Branch | Purpose |
@@ -169,8 +190,10 @@ Work lands on `design` or `features` and reaches `main` only through a pull requ
 
 ## Roadmap
 
-1. **Live output streaming** and notch-integrated status UI (output is currently shown once a task finishes).
-2. **Chrome annotation mode**: select page elements, attach selector, text and region screenshot to a task. Integration with the `agentation-mcp` server is planned. Agentation is licensed under PolyForm Shield, so Haven will use its own capture layer and integrate only through the MCP interface.
+1. **Notch-integrated status UI** and persistence of task history.
+2. **Chrome extension and region screenshots** for annotation: DOM selector, role and text from the page, plus a cropped screenshot (needs Screen Recording). Integration with the `agentation-mcp` server is planned. Agentation is licensed under PolyForm Shield, so Haven will use its own capture layer and integrate only through the MCP interface.
 3. **Keychain secure fill** with Touch ID and an audit log.
 4. **Parallel task management**, Quick Actions and Workflows.
 5. **MCP servers and skills** attached per task.
+
+Detailed milestones are in [`docs/plan.md`](docs/plan.md).
