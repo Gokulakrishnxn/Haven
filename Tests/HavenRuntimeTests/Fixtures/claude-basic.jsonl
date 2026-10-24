@@ -1,0 +1,5 @@
+{"type": "system", "subtype": "init"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]}}
+{"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "resetsAt": 1792849800, "rateLimitType": "five_hour", "overageStatus": "rejected", "overageDisabledReason": "org_level_disabled", "isUsingOverage": false}, "uuid": "1d5210eb-6cca-43cb-8089-2b8dc9ccb5e8", "session_id": "6834dd61-203a-424a-a189-980b70fb9c48"}
+{"type": "system", "subtype": "post_turn_summary"}
+{"type": "result", "subtype": "success", "is_error": false, "result": "hi"}
