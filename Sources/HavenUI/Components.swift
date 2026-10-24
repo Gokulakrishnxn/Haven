@@ -104,7 +104,7 @@ public struct KeyHint: View {
     }
 }
 
-/// Menu that picks the agent for a task.
+/// Menu that picks the agent, shown as its icon and name.
 public struct AgentMenu: View {
     @Binding var agent: Agent
 
@@ -113,17 +113,74 @@ public struct AgentMenu: View {
     public var body: some View {
         Menu {
             ForEach(Agent.allCases) { a in
-                Button(a.rawValue) { agent = a }
+                Button { agent = a } label: {
+                    Label { Text(a.displayName) } icon: { Image(nsImage: AgentIconImage.image(for: a)) }
+                }
             }
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "sparkles").font(.caption)
-                Text(agent.rawValue).font(.callout)
+            HStack(spacing: 6) {
+                Image(nsImage: AgentIconImage.image(for: agent))
+                Text(agent.displayName).font(.callout.weight(.medium))
             }
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .accessibilityLabel("Agent: \(agent.rawValue)")
+        .accessibilityLabel("Agent: \(agent.displayName)")
+    }
+}
+
+/// Menu that picks the model for the chosen agent. Hidden when the agent offers only its default.
+public struct ModelMenu: View {
+    let agent: Agent
+    @Binding var model: String?
+
+    public init(agent: Agent, model: Binding<String?>) { self.agent = agent; _model = model }
+
+    private var current: AgentModel {
+        agent.models.first { $0.id == model } ?? .default
+    }
+
+    public var body: some View {
+        if agent.models.count > 1 {
+            Menu {
+                ForEach(agent.models) { m in
+                    Button { model = m.id } label: {
+                        if m.id == model { Label(m.name, systemImage: "checkmark") } else { Text(m.name) }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(current.name).font(.callout)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Model: \(current.name)")
+        }
+    }
+}
+
+/// Small round icon button used for attach and annotate in the composer.
+public struct ToolbarIconButton: View {
+    let icon: String
+    let help: String
+    let action: () -> Void
+
+    public init(icon: String, help: String, action: @escaping () -> Void) {
+        self.icon = icon; self.help = help; self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 28, height: 28)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 
