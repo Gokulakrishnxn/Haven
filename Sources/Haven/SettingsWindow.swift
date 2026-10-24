@@ -10,15 +10,18 @@ final class SettingsWindow: NSWindowController {
     private let quickActions: QuickActionStore
     private let vault: VaultController
     private let mcp: MCPStore
+    private let updates: UpdateChecker
     private let model = SettingsModel(displayName: Preferences.displayName, email: Preferences.email,
                                       agent: Preferences.defaultAgent, showPill: Preferences.showStatusPill,
                                       workingFolder: Preferences.workingFolder,
-                                      composeShortcut: Preferences.composeShortcut, annotateShortcut: Preferences.annotateShortcut)
+                                      composeShortcut: Preferences.composeShortcut, annotateShortcut: Preferences.annotateShortcut,
+                                      autoUpdateCheck: Preferences.autoUpdateCheck)
     private var poll: Timer?
     private var loading = false
     var onChange: (() -> Void)?
 
-    init(store: TaskStore, quickActions: QuickActionStore, vault: VaultController, mcp: MCPStore) {
+    init(store: TaskStore, quickActions: QuickActionStore, vault: VaultController, mcp: MCPStore, updates: UpdateChecker) {
+        self.updates = updates
         self.mcp = mcp
         self.store = store
         self.quickActions = quickActions
@@ -105,6 +108,10 @@ final class SettingsWindow: NSWindowController {
             }
         }
         model.onRefreshAudit = { [weak self] in self?.reloadVault() }
+        model.onCheckForUpdates = { [weak self] in Task { await self?.updates.check() } }
+        model.onOpenUpdate = { [weak self] in
+            if case .available(let release) = self?.updates.state { NSWorkspace.shared.open(release.pageURL) }
+        }
         model.onClearHistory = { [weak self] in self?.store.clearFinished() }
         model.onOpenRepo = {
             if let url = URL(string: "https://github.com/Gokulakrishnxn/Haven") { NSWorkspace.shared.open(url) }
@@ -120,6 +127,19 @@ final class SettingsWindow: NSWindowController {
                      outcome: $0.outcome.rawValue, detail: $0.detail)
         }
         model.auditIntact = vault.audit.firstBrokenIndex() == nil
+    }
+
+    /// Mirrors the update checker's state into the About pane.
+    func showUpdate(_ state: UpdateChecker.State) {
+        model.checkingForUpdate = state == .checking
+        model.updateAvailable = false
+        switch state {
+        case .idle, .checking: model.updateStatus = state == .checking ? "Checking…" : ""
+        case .upToDate: model.updateStatus = "Haven is up to date."
+        case .noReleases: model.updateStatus = "No releases have been published yet."
+        case .available(let r): model.updateStatus = "Version \(r.version) is available."; model.updateAvailable = true
+        case .failed(let message): model.updateStatus = message
+        }
     }
 
     func show() {
@@ -164,6 +184,7 @@ final class SettingsWindow: NSWindowController {
         Preferences.workingFolder = model.workingFolder
         Preferences.composeShortcut = model.composeShortcut
         Preferences.annotateShortcut = model.annotateShortcut
+        Preferences.autoUpdateCheck = model.autoUpdateCheck
         onChange?()
     }
 }

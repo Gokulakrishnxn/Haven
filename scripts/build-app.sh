@@ -1,5 +1,10 @@
 #!/bin/bash
-# Build a local, unsigned Haven.app. Existing builds are preserved as backups.
+# Build a local Haven.app with its helper commands and the Chrome extension.
+# Existing builds are preserved as backups.
+#
+# Environment:
+#   SIGN_IDENTITY  Developer ID identity to sign with (hardened runtime). Default: ad-hoc signature.
+#   HAVEN_ZIP=1    also write Haven-<version>.zip next to the app, ready to attach to a release.
 set -euo pipefail
 
 if [[ $# -gt 1 || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -47,10 +52,29 @@ if [[ -e "$app_path" ]]; then
 fi
 
 cd "$repo_root"
-swift build --configuration release --product Haven
+version="$(tr -d '[:space:]' < "$repo_root/VERSION")"
+if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]; then
+    printf 'VERSION must look like 1.2.3 (found "%s").\n' "$version" >&2
+    exit 1
+fi
+build_number="$(git -C "$repo_root" rev-list --count HEAD 2>/dev/null || echo 1)"
+
+# The app and the helper commands agents run (they live next to the app's executable).
+helpers=(haven-vault haven-mac haven-browser)
+for product in Haven "${helpers[@]}"; do
+    swift build --configuration release --product "$product"
+done
 bin_path="$(swift build --configuration release --product Haven --show-bin-path)"
-if [[ ! -x "$bin_path/Haven" ]]; then
-    printf 'Built executable not found: %s/Haven\n' "$bin_path" >&2
+for product in Haven "${helpers[@]}"; do
+    if [[ ! -x "$bin_path/$product" ]]; then
+        printf 'Built executable not found: %s/%s\n' "$bin_path" "$product" >&2
+        exit 1
+    fi
+done
+
+extension_dir="$repo_root/extension"
+if [[ ! -f "$extension_dir/manifest.json" ]]; then
+    printf 'Chrome extension missing: %s\n' "$extension_dir" >&2
     exit 1
 fi
 
@@ -69,7 +93,12 @@ trap cleanup_staging EXIT
 staged_app="$staging_root/Haven.app"
 mkdir -p "$staged_app/Contents/MacOS" "$staged_app/Contents/Resources"
 install -m 755 "$bin_path/Haven" "$staged_app/Contents/MacOS/Haven"
+for helper in "${helpers[@]}"; do
+    install -m 755 "$bin_path/$helper" "$staged_app/Contents/MacOS/$helper"
+done
 install -m 644 "$icon_path" "$staged_app/Contents/Resources/Haven.icns"
+# The extension folder the Settings > Browser pane points people to.
+/usr/bin/ditto "$extension_dir" "$staged_app/Contents/Resources/extension"
 
 # SwiftPM's generated Bundle.module accessor searches the app's Resources.
 # Ignore cached test bundles; they are not part of the application.
@@ -93,8 +122,9 @@ cat > "$staged_app/Contents/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key><string>Haven</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleIconFile</key><string>Haven</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleShortVersionString</key><string>0.0.0</string>
     <key>CFBundleVersion</key><string>1</string>
+    <key>NSAppleEventsUsageDescription</key><string>Haven reads the address and title of your active browser tab so you can attach it to a task.</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
@@ -102,7 +132,22 @@ cat > "$staged_app/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$staged_app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$staged_app/Contents/Info.plist"
 /usr/bin/plutil -lint "$staged_app/Contents/Info.plist"
+
+# Sign helpers first, then the app. Without SIGN_IDENTITY this is an ad-hoc signature: enough for a stable
+# identity on this Mac, not for distribution. With a Developer ID identity the hardened runtime is used.
+identity="${SIGN_IDENTITY:--}"
+sign_args=(--force --sign "$identity")
+if [[ "$identity" != "-" ]]; then
+    sign_args+=(--options runtime --timestamp)
+fi
+for helper in "${helpers[@]}"; do
+    /usr/bin/codesign "${sign_args[@]}" --identifier "com.haven.$helper" "$staged_app/Contents/MacOS/$helper"
+done
+/usr/bin/codesign "${sign_args[@]}" --entitlements "$repo_root/scripts/Haven.entitlements" --identifier "$bundle_id" "$staged_app"
+/usr/bin/codesign --verify --deep --strict "$staged_app"
 printf 'Created by scripts/build-app.sh\n' > "$staged_app/.haven-local-build"
 
 backup_path=""
@@ -119,6 +164,12 @@ if ! mv "$staged_app" "$app_path"; then
     exit 1
 fi
 
-printf 'Built local app: %s\n' "$app_path"
+printf 'Built Haven %s (build %s): %s\n' "$version" "$build_number" "$app_path"
+if [[ "${HAVEN_ZIP:-}" == "1" ]]; then
+    zip_path="$output_dir/Haven-$version.zip"
+    rm -f "$zip_path"
+    /usr/bin/ditto -c -k --keepParent "$app_path" "$zip_path"
+    printf 'Release archive: %s\n' "$zip_path"
+fi
 if [[ -n "$backup_path" ]]; then printf 'Previous build preserved: %s\n' "$backup_path"; fi
 printf 'Launch with: open "%s"\n' "$app_path"

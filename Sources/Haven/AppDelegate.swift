@@ -4,11 +4,13 @@ import Carbon.HIToolbox
 import HavenCore
 import HavenUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = TaskStore()
     private let quickActions = QuickActionStore()
     private lazy var vaultController = VaultController(store: store)
     private let mcpStore = MCPStore()
+    private let updates = UpdateChecker()
     private lazy var panel = ComposerPanel(quickActions: quickActions)
     private var statusItem: NSStatusItem!
     private var composeKey: HotKey?
@@ -26,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return w
     }()
     private lazy var settings: SettingsWindow = {
-        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController, mcp: mcpStore)
+        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController, mcp: mcpStore, updates: updates)
         w.onChange = { [weak self] in
             guard let self else { return }
             self.notch.update(items: self.store.tasks.map(\.item))
@@ -85,6 +87,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.mcpConfigPath = { [weak self] id in self?.mcpStore.configPath(for: id) }
         store.helperDirectory = Bundle.main.executableURL?.deletingLastPathComponent().path
         vaultController.start()
+        updates.onChange = { [weak self] state in
+            guard let self else { return }
+            self.settings.showUpdate(state)
+            if case .available(let release) = state { self.menuModel.updateLabel = "Update available: \(release.version)" } else { self.menuModel.updateLabel = nil }
+        }
+        menuModel.onUpdate = { [weak self] in
+            if case .available(let release) = self?.updates.state { NSWorkspace.shared.open(release.pageURL) }
+        }
+        updates.checkAutomaticallyIfDue()
         notch.update(items: [])
         if !Preferences.onboarded { onboarding.show() }
 
