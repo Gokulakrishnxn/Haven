@@ -19,8 +19,10 @@ public struct PillState: Equatable, Sendable {
 public final class NotchModel: ObservableObject {
     @Published public var expanded = false
     @Published public var items: [TaskItem] = []
-    /// Width of the physical notch (or a default on Macs without one); the collapsed bar wraps it.
+    /// Width of the physical notch; the collapsed bar wraps it. Only meaningful when `hasNotch`.
     @Published public var notchWidth: CGFloat = 190
+    /// False on Macs and displays without a notch, where the bar is a compact pill instead.
+    @Published public var hasNotch = false
 
     public var onAsk: () -> Void = {}
     public var onAnnotate: () -> Void = {}
@@ -43,29 +45,52 @@ public struct NotchView: View {
             collapsedBar
             if model.expanded { expandedBody.transition(.opacity) }
         }
-        .frame(width: model.expanded ? 440 : model.notchWidth + 120)
+        .frame(width: width)
+        .fixedSize(horizontal: width == nil, vertical: false)
         .background(Color.black)
-        .clipShape(NotchShape(bottomRadius: model.expanded ? 24 : 14))
+        .clipShape(NotchShape(bottomRadius: model.expanded ? 26 : 16, flare: Self.flare))
+        // A hairline keeps the bar readable against dark wallpapers where there is no physical notch.
+        .overlay(NotchShape(bottomRadius: model.expanded ? 26 : 16, flare: Self.flare)
+            .stroke(Color.white.opacity(model.hasNotch ? 0 : 0.14), lineWidth: 1))
         .foregroundStyle(.white)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: model.expanded)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: model.pill)
         .onHover { inside in if !inside && model.expanded { model.expanded = false } }
     }
 
-    // The row level with the notch: status on the left, nothing in the middle (the notch), state on the right.
+    /// Concave "ears" at the top corners so the bar flows out of the screen edge like the notch itself.
+    private static let flare: CGFloat = 10
+
+    /// Fixed width around a physical notch (a short wing each side, wider when there is status text),
+    /// or content-sized for the compact pill.
+    private var width: CGFloat? {
+        if model.expanded { return 440 }
+        guard model.hasNotch else { return nil }
+        let wing: CGFloat = model.pill == nil ? 46 : 112
+        return model.notchWidth + 2 * (wing + Self.flare)
+    }
+
+    private var working: Bool { model.pill?.state == .working }
+
+    // With a notch: status on the left, state on the right, the notch in the middle.
+    // Without one: logo, status text and chevron packed together.
     private var collapsedBar: some View {
         Button { model.expanded.toggle() } label: {
             HStack(spacing: 8) {
+                WorkingMark(working: working, size: 18)
+                if model.hasNotch { Spacer(minLength: model.notchWidth) }
                 if let pill = model.pill {
-                    HavenLogo(animated: pill.state == .working).frame(width: 16, height: 16)
-                    Spacer(minLength: model.notchWidth - 20)
-                    Text(pill.text).font(.system(size: 11, weight: .medium)).lineLimit(1)
-                } else {
-                    HavenLogo().frame(width: 16, height: 16)
-                    Spacer(minLength: model.notchWidth - 20)
-                    Image(systemName: model.expanded ? "chevron.up" : "chevron.down").font(.system(size: 9, weight: .bold)).opacity(0.6)
+                    Text(pill.text).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                    if !model.hasNotch { StatusDot(pill.state) }
+                } else if !model.hasNotch {
+                    Text("Haven").font(.system(size: 12, weight: .medium)).opacity(0.85)
+                }
+                if model.hasNotch == false || model.pill == nil {
+                    Image(systemName: model.expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .bold)).opacity(0.55)
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, Self.flare + 12)
             .frame(height: 32)
             .contentShape(Rectangle())
         }
@@ -140,9 +165,10 @@ struct NotchAction: View {
     }
 }
 
-/// Flat top edge (flush with the screen), rounded bottom corners.
+/// Flat top edge flush with the screen, concave ears at the top corners, rounded bottom corners.
 struct NotchShape: Shape {
     var bottomRadius: CGFloat
+    var flare: CGFloat
 
     var animatableData: CGFloat {
         get { bottomRadius }
@@ -150,15 +176,48 @@ struct NotchShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let r = min(bottomRadius, rect.height / 2, rect.width / 2)
+        let f = flare
+        let r = min(bottomRadius, rect.height / 2, (rect.width - 2 * f) / 2)
         var p = Path()
         p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-        p.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        p.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        p.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        p.addQuadCurve(to: CGPoint(x: rect.minX + f, y: rect.minY + f), control: CGPoint(x: rect.minX + f, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.minX + f, y: rect.maxY - r))
+        p.addArc(center: CGPoint(x: rect.minX + f + r, y: rect.maxY - r), radius: r, startAngle: .degrees(180), endAngle: .degrees(90), clockwise: true)
+        p.addLine(to: CGPoint(x: rect.maxX - f - r, y: rect.maxY))
+        p.addArc(center: CGPoint(x: rect.maxX - f - r, y: rect.maxY - r), radius: r, startAngle: .degrees(90), endAngle: .degrees(0), clockwise: true)
+        p.addLine(to: CGPoint(x: rect.maxX - f, y: rect.minY + f))
+        p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY), control: CGPoint(x: rect.maxX - f, y: rect.minY))
         p.closeSubpath()
         return p
+    }
+}
+
+/// The Haven mark. While a task is running it hops and glows so progress is visible at a glance;
+/// it holds still for Reduce Motion.
+public struct WorkingMark: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let working: Bool
+    let size: CGFloat
+
+    public init(working: Bool, size: CGFloat = 18) { self.working = working; self.size = size }
+
+    public var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !working || reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let moving = working && !reduceMotion
+            let hop = moving ? -abs(sin(t * 3.4)) * size * 0.14 : 0
+            let glow = moving ? (sin(t * 2.4) + 1) / 2 : 0
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [Color.accentColor.opacity(0.55 * glow), .clear],
+                                         center: .center, startRadius: 0, endRadius: size * 0.95))
+                    .frame(width: size * 2, height: size * 2)
+                HavenLogo(animated: working)
+            }
+            .frame(width: size, height: size)
+            .offset(y: hop)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
