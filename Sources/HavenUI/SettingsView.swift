@@ -459,7 +459,7 @@ struct AuditPane: View {
     @ObservedObject var model: SettingsModel
 
     private static let format: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short; return f
+        let f = DateFormatter(); f.dateFormat = "yy-MM-dd HH:mm"; return f
     }()
 
     var body: some View {
@@ -474,14 +474,14 @@ struct AuditPane: View {
             Section("Credential access") {
                 if model.auditRows.isEmpty { Text("No credential has been used yet.").foregroundStyle(.secondary) }
                 ForEach(model.auditRows) { row in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
                             Image(systemName: icon(row.outcome)).foregroundStyle(color(row.outcome))
-                            Text("\(row.credential) on \(row.site)").font(.callout.weight(.medium))
+                            Text(row.site).font(.system(size: 13, design: .monospaced))
                             Spacer()
-                            Text(Self.format.string(from: row.time)).font(.caption).foregroundStyle(.secondary)
+                            Text(Self.format.string(from: row.time)).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
                         }
-                        Text("Task: \(row.task)").font(.caption).foregroundStyle(.secondary)
+                        Text("\(row.credential) · \(row.task)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         if !row.detail.isEmpty { Text(row.detail).font(.caption).foregroundStyle(.tertiary) }
                     }
                     .padding(.vertical, 2)
