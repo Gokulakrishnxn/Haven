@@ -173,8 +173,8 @@ public struct ToolbarIconButton: View {
     public var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 28, height: 28)
+                .font(.system(size: 12.5, weight: .medium))
+                .frame(width: 26, height: 26)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
