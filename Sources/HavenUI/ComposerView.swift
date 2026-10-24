@@ -18,11 +18,14 @@ public final class ComposerModel: ObservableObject {
     @Published public var selection: String?
     @Published public var files: [URL] = []
     @Published public var isDropTargeted = false
+    @Published public var quickActions: [QuickAction] = []
 
     public var onSubmit: (ComposerSubmission, Bool) -> Void = { _, _ in }
     public var onClose: () -> Void = {}
     public var onAnnotate: () -> Void = {}
     public var onAttach: () -> Void = {}
+    /// Asks the app to save the current prompt as a Quick Action.
+    public var onSaveAction: (String, Agent, String?) -> Void = { _, _, _ in }
 
     public init() {}
 
@@ -31,6 +34,13 @@ public final class ComposerModel: ObservableObject {
         guard !trimmed.isEmpty else { return }
         onSubmit(ComposerSubmission(agent: agent, model: model, text: trimmed, files: files), keepOpen)
         text = ""
+        files = []
+    }
+
+    /// Runs a saved action immediately with the current context.
+    public func run(_ action: QuickAction) {
+        onSubmit(ComposerSubmission(agent: action.agent ?? agent, model: action.model ?? (action.agent == nil ? model : nil),
+                                    text: action.prompt, files: files), false)
         files = []
     }
 
@@ -77,6 +87,7 @@ public struct ComposerView: View {
                 ModelMenu(agent: model.agent, model: $model.model)
                 ToolbarIconButton(icon: "paperclip", help: "Attach files (or drop them here)", action: model.onAttach)
                 ToolbarIconButton(icon: "scope", help: "Annotate: point at things on screen", action: model.onAnnotate)
+                QuickActionsMenu(model: model)
                 Spacer()
                 KeyHint("⌘↩", "Run another")
                 KeyHint("esc", "Close").padding(.trailing, 8)
@@ -129,5 +140,36 @@ public struct ComposerView: View {
                 .overlay(Label("Drop to attach", systemImage: "paperclip").font(.headline))
                 .allowsHitTesting(false)
         }
+    }
+}
+
+/// Bolt menu: run a saved action in one step, or save the current prompt as one.
+struct QuickActionsMenu: View {
+    @ObservedObject var model: ComposerModel
+
+    var body: some View {
+        Menu {
+            if model.quickActions.isEmpty {
+                Text("No Quick Actions yet")
+            }
+            ForEach(model.quickActions) { action in
+                Button(action.name) { model.run(action) }
+            }
+            Divider()
+            Button("Save Prompt as Quick Action…") {
+                model.onSaveAction(model.text, model.agent, model.model)
+            }
+            .disabled(model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } label: {
+            Image(systemName: "bolt")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 28, height: 28)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+        .help("Quick Actions")
+        .accessibilityLabel("Quick Actions")
     }
 }

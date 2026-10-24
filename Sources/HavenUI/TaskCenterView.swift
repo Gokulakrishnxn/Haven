@@ -8,6 +8,7 @@ public final class TaskCenterModel: ObservableObject {
     public var onCancel: (UUID) -> Void = { _ in }
     public var onRerun: (UUID) -> Void = { _ in }
     public var onClearFinished: () -> Void = {}
+    public var onSaveAction: (UUID) -> Void = { _ in }
 
     public init() {}
 
@@ -26,7 +27,8 @@ public struct TaskCenterView: View {
             if let task = model.selected {
                 TaskDetailView(task: task,
                                onCancel: { model.onCancel(task.id) },
-                               onRerun: { model.onRerun(task.id) })
+                               onRerun: { model.onRerun(task.id) },
+                               onSaveAction: { model.onSaveAction(task.id) })
             } else {
                 EmptyState()
             }
@@ -78,6 +80,7 @@ struct TaskDetailView: View {
     let task: TaskItem
     let onCancel: () -> Void
     let onRerun: () -> Void
+    let onSaveAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -88,6 +91,7 @@ struct TaskDetailView: View {
                     if task.state == .working {
                         Button("Cancel", action: onCancel).keyboardShortcut(".", modifiers: .command)
                     } else {
+                        Button { onSaveAction() } label: { Label("Save as Action", systemImage: "bolt") }
                         Button("Run Again", action: onRerun).keyboardShortcut("r", modifiers: .command)
                     }
                 }

@@ -2,7 +2,7 @@ import SwiftUI
 import HavenCore
 
 public enum SettingsSection: String, CaseIterable, Identifiable {
-    case profile = "Profile", general = "General", agents = "Agents"
+    case profile = "Profile", general = "General", agents = "Agents", quickActions = "Quick Actions"
     case shortcuts = "Shortcuts", privacy = "Privacy", about = "About"
 
     public var id: String { rawValue }
@@ -12,6 +12,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable {
         case .profile: return "person.crop.circle"
         case .general: return "gearshape"
         case .agents: return "sparkles"
+        case .quickActions: return "bolt"
         case .shortcuts: return "command"
         case .privacy: return "hand.raised"
         case .about: return "info.circle"
@@ -37,6 +38,7 @@ public final class SettingsModel: ObservableObject {
     @Published public var accessibilityGranted = false
     @Published public var screenRecordingGranted = false
     @Published public var taskCount = 0
+    @Published public var quickActions: [QuickAction] = []
     @Published public var version = "0.1.0"
 
     public var onChange: () -> Void = {}
@@ -46,6 +48,9 @@ public final class SettingsModel: ObservableObject {
     public var onOpenScreenRecording: () -> Void = {}
     public var onClearHistory: () -> Void = {}
     public var onOpenRepo: () -> Void = {}
+    public var onUpdateAction: (QuickAction) -> Void = { _ in }
+    public var onDeleteAction: (UUID) -> Void = { _ in }
+    public var onAddAction: () -> Void = {}
 
     public init(displayName: String, email: String, agent: Agent, showPill: Bool, workingFolder: String) {
         self.displayName = displayName
@@ -74,6 +79,7 @@ public struct SettingsView: View {
                 case .profile: ProfilePane(model: model)
                 case .general: GeneralPane(model: model)
                 case .agents: AgentsPane(model: model)
+                case .quickActions: QuickActionsPane(model: model)
                 case .shortcuts: ShortcutsPane()
                 case .privacy: PrivacyPane(model: model)
                 case .about: AboutPane(model: model)
@@ -265,5 +271,81 @@ struct AboutPane: View {
                 Button("View on GitHub", action: model.onOpenRepo)
             }
         }
+    }
+}
+
+struct QuickActionsPane: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        Form {
+            if model.quickActions.isEmpty {
+                Section {
+                    VStack(spacing: 6) {
+                        Image(systemName: "bolt").font(.system(size: 28)).foregroundStyle(.tertiary)
+                        Text("No Quick Actions yet").font(.headline)
+                        Text("Save a prompt that worked, then rerun it in one step from the composer.")
+                            .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                }
+            }
+            ForEach(model.quickActions) { action in
+                Section {
+                    ActionEditor(action: action,
+                                 onChange: model.onUpdateAction,
+                                 onDelete: { model.onDeleteAction(action.id) })
+                }
+            }
+            Section {
+                Button { model.onAddAction() } label: { Label("New Quick Action", systemImage: "plus") }
+            }
+        }
+    }
+}
+
+/// Edits one action. Keeps its own draft and writes through on every change.
+final class ActionDraft: ObservableObject {
+    @Published var action: QuickAction
+    init(_ action: QuickAction) { self.action = action }
+}
+
+struct ActionEditor: View {
+    @StateObject private var draft: ActionDraft
+    let onChange: (QuickAction) -> Void
+    let onDelete: () -> Void
+
+    init(action: QuickAction, onChange: @escaping (QuickAction) -> Void, onDelete: @escaping () -> Void) {
+        _draft = StateObject(wrappedValue: ActionDraft(action))
+        self.onChange = onChange
+        self.onDelete = onDelete
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "bolt.fill").foregroundStyle(.tint)
+                TextField("Name", text: bind(\.name)).textFieldStyle(.plain).font(.headline)
+                Spacer()
+                Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }.buttonStyle(.borderless)
+            }
+            TextField("Prompt", text: bind(\.prompt), axis: .vertical).lineLimit(2...6)
+            HStack {
+                Picker("Agent", selection: Binding(get: { draft.action.agent }, set: { draft.action.agent = $0; draft.action.model = nil; onChange(draft.action) })) {
+                    Text("Default").tag(Agent?.none)
+                    ForEach(Agent.allCases) { Text($0.displayName).tag(Agent?.some($0)) }
+                }
+                if let agent = draft.action.agent, agent.models.count > 1 {
+                    Picker("Model", selection: Binding(get: { draft.action.model }, set: { draft.action.model = $0; onChange(draft.action) })) {
+                        ForEach(agent.models) { Text($0.name).tag($0.id) }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func bind(_ keyPath: WritableKeyPath<QuickAction, String>) -> Binding<String> {
+        Binding(get: { draft.action[keyPath: keyPath] }, set: { draft.action[keyPath: keyPath] = $0; onChange(draft.action) })
     }
 }
