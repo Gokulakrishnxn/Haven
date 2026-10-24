@@ -107,6 +107,8 @@ public struct SettingsView: View {
                 Label(s.rawValue, systemImage: s.icon).tag(s)
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(Color(white: 0.04))
             .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 200)
         } detail: {
             Group {
@@ -123,9 +125,13 @@ public struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .background(HavenTheme.canvas)
             .navigationTitle(model.section.rawValue)
         }
         .frame(width: 700, height: 560)
+        .background(HavenTheme.canvas)
+        .preferredColorScheme(.dark)
     }
 }
 

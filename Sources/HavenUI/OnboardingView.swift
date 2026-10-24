@@ -51,7 +51,9 @@ public struct OnboardingView: View {
         }
         .padding(36)
         .frame(width: 520, height: 540)
-        .background(VisualEffectBackground(material: .windowBackground))
+        .background(HavenTheme.canvas)
+        .foregroundStyle(.white)
+        .preferredColorScheme(.dark)
     }
 
     private var welcome: some View {
@@ -99,7 +101,8 @@ public struct OnboardingView: View {
                             .foregroundStyle(found.contains(agent) ? .green : .secondary)
                     }
                     .padding(12)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                    .background(HavenTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(HavenTheme.hairline))
                 }
             } else {
                 ProgressView().controlSize(.small)

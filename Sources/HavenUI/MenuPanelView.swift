@@ -65,6 +65,9 @@ public struct MenuPanelView: View {
             .padding(8)
         }
         .frame(width: 320)
+        .background(HavenTheme.surface)
+        .foregroundStyle(.white)
+        .preferredColorScheme(.dark)
     }
 
     private var header: some View {
