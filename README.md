@@ -58,7 +58,12 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | `haven-vault` helper agents run to request a login without seeing it | Implemented; verified end to end up to the approval step |
 | Audit log of every credential access (hash-chained, verifiable in Settings) | Implemented |
 | Haven-hosted credits | Not available (no hosted service exists) |
-| Persistence of task history, per-action approval policy | Planned |
+| Task history saved across launches (last 100 tasks, restored as finished) | Implemented |
+| Approval: agents run `haven-vault approve` before risky actions; an approval card appears and the answer is audited (120 s timeout counts as Deny) | Implemented; verified end to end with a real Claude task (Allow path via a dev flag) |
+| Custom global shortcuts with a recorder in Settings | Implemented (record UI not yet tried by hand) |
+| MCP servers (command or web address) enabled in Settings are passed to Claude tasks | Implemented; Claude confirmed loading the config; no real server tried |
+| Mac control tools for agents (snapshot, click, type) and a browser extension | Planned |
+| Per-action approval policy (auto-allow classes) | Planned |
 | MCP and skills per task | Planned |
 
 ## System Architecture
@@ -146,6 +151,14 @@ Development aid: launch with `HAVEN_SHOW=composer|tasks|onboarding|settings` to 
 ### Quick Actions
 
 Save a prompt that worked (from the composer's bolt menu, or **Save as Action** on a finished task), then run it again in one step. Actions remember their agent and model, run with whatever context is current (app, selection, browser tab, attached files), and are managed under Settings > Quick Actions. They are stored as JSON in Application Support.
+
+### Approvals
+
+Agents are told to run `haven-vault approve --action "<what>" --reason "<why>"` before anything hard to undo. Haven shows a card under the notch (Deny, or Allow once), records the answer in the audit log, and returns Approved or Denied to the agent. Unanswered requests are denied after two minutes. This relies on the agent following its instructions; it is a guardrail, not a sandbox.
+
+### Tools (MCP)
+
+Settings > Tools lists MCP servers you connect, as a command (for example `npx -y @modelcontextprotocol/server-filesystem ~/Documents`) or a web address. Enabled servers are written to a per-task config file and passed to Claude with `--mcp-config`. Other agents do not use them yet.
 
 ### Secure sign-in
 
