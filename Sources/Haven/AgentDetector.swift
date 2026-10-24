@@ -1,4 +1,6 @@
 import Foundation
+import HavenCore
+import HavenRuntime
 
 /// Finds which agent CLIs are installed, using a login shell so the user's PATH applies.
 enum AgentDetector {
@@ -8,7 +10,7 @@ enum AgentDetector {
             for agent in Agent.allCases {
                 let p = Process()
                 p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-                p.arguments = ["-lc", "command -v \(agent.executable)"]
+                p.arguments = ["-lc", "command -v \(AgentRegistry.adapter(for: agent).executable)"]
                 let pipe = Pipe()
                 p.standardOutput = pipe
                 p.standardError = Pipe()

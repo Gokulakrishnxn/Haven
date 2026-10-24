@@ -1,30 +1,6 @@
 import Foundation
-
-enum Agent: String, CaseIterable, Identifiable {
-    case claudeCode = "Claude Code"
-    case codex = "Codex"
-    case grok = "Grok"
-
-    var id: String { rawValue }
-
-    /// CLI executable name.
-    var executable: String {
-        switch self {
-        case .claudeCode: return "claude"
-        case .codex: return "codex"
-        case .grok: return "grok"
-        }
-    }
-
-    /// Arguments placed before the prompt.
-    var arguments: [String] {
-        switch self {
-        case .claudeCode: return ["-p"]
-        case .codex: return ["exec"]
-        case .grok: return ["-p"]
-        }
-    }
-}
+import HavenCore
+import HavenRuntime
 
 final class HavenTask: ObservableObject, Identifiable {
     enum Status: String { case working = "Working…", done = "Done", failed = "Failed", cancelled = "Cancelled" }
@@ -35,7 +11,7 @@ final class HavenTask: ObservableObject, Identifiable {
     let context: TaskContext
     let startedAt = Date()
     fileprivate(set) var finishedAt: Date?
-    fileprivate var process: Process?
+    fileprivate var run: AgentRun?
     @Published var status: Status = .working
     @Published var output = ""
 
@@ -56,7 +32,8 @@ final class HavenTask: ObservableObject, Identifiable {
     }
 }
 
-/// Runs each task as its own background process so one failure never blocks others.
+/// Starts each task through its agent adapter and applies the resulting events.
+/// One failing task never affects another.
 final class TaskStore: ObservableObject {
     @Published private(set) var tasks: [HavenTask] = []
     /// Called on the main thread whenever a task is added, changes status, or produces output.
@@ -68,17 +45,22 @@ final class TaskStore: ObservableObject {
     func start(agent: Agent, instruction: String, context: TaskContext) -> HavenTask {
         let task = HavenTask(agent: agent, instruction: instruction, context: context)
         tasks.insert(task, at: 0)
-        run(task)
+
+        let run = AgentRunner.launch(AgentRegistry.adapter(for: agent), request: AgentRequest(prompt: task.prompt))
+        task.run = run
+        Task { @MainActor [weak self, weak task] in
+            for await event in run.events {
+                guard let self, let task else { return }
+                self.apply(event, to: task)
+            }
+        }
         onChange?()
         return task
     }
 
     func cancel(_ task: HavenTask) {
         guard task.status == .working else { return }
-        task.status = .cancelled
-        task.finishedAt = Date()
-        task.process?.terminate()
-        onChange?()
+        task.run?.cancel()  // the .finished(.cancelled) event updates status
     }
 
     func rerun(_ task: HavenTask) {
@@ -90,47 +72,31 @@ final class TaskStore: ObservableObject {
         onChange?()
     }
 
-    private func run(_ task: HavenTask) {
-        let process = Process()
-        // Login shell so PATH includes where the user installed the agent CLIs.
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "exec \"$0\" \"$@\"", task.agent.executable] + task.agent.arguments + [task.prompt]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        task.process = process
-
-        // Stream output as it arrives.
-        pipe.fileHandleForReading.readabilityHandler = { [weak self, weak task] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            DispatchQueue.main.async {
-                task?.output += String(decoding: data, as: UTF8.self)
-                self?.onChange?()
+    @MainActor
+    private func apply(_ event: TaskEvent, to task: HavenTask) {
+        switch event {
+        case .started:
+            break
+        case .text(let text):
+            task.output += text.hasSuffix("\n") ? text : text + "\n"
+        case .toolUse(let name):
+            task.output += "› \(name)\n"
+        case .finished(let outcome):
+            switch outcome {
+            case .success(let result):
+                task.status = .done
+                // Plain-text agents already streamed their output; structured ones may only report a result.
+                if task.output.isEmpty, let result { task.output = result }
+            case .failure(let message):
+                task.status = .failed
+                if !task.output.contains(message) { task.output += (task.output.isEmpty ? "" : "\n") + message }
+            case .cancelled:
+                task.status = .cancelled
             }
-        }
-
-        process.terminationHandler = { [weak self, weak task] proc in
-            pipe.fileHandleForReading.readabilityHandler = nil
-            let rest = pipe.fileHandleForReading.readDataToEndOfFile()
-            DispatchQueue.main.async {
-                guard let task else { return }
-                if !rest.isEmpty { task.output += String(decoding: rest, as: UTF8.self) }
-                if task.status == .working {
-                    task.status = proc.terminationStatus == 0 ? .done : .failed
-                    task.finishedAt = Date()
-                }
-                task.process = nil
-                self?.objectWillChange.send()
-                self?.onChange?()
-            }
-        }
-        do {
-            try process.run()
-        } catch {
-            task.output = error.localizedDescription
-            task.status = .failed
             task.finishedAt = Date()
+            task.run = nil
+            objectWillChange.send()
         }
+        onChange?()
     }
 }

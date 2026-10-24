@@ -41,6 +41,8 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Composer with remembered agent, ⌘↩ to start another task | Implemented |
 | Agent picker: Claude Code, Codex, Grok | Implemented (Codex and Grok flags unverified) |
 | Background tasks with live streamed output, cancel, rerun | Implemented |
+| Structured events from Claude Code (`stream-json`), process-group cancel and timeout | Implemented, with tests |
+| Structured events from Codex and Grok | Planned (plain text for now) |
 | Status pill (running count, last result) | Implemented |
 | Task Center (sidebar, header actions, live output) | Implemented |
 | Annotate mode: hover highlight, element and region pins, notes, brief | Implemented (element identity needs Accessibility; no screenshot yet) |
@@ -101,7 +103,16 @@ This repository is an early scaffold. Items below are marked by what exists toda
 
 ## Component Reference
 
-All sources live in `Sources/Haven/`.
+The package is split into three targets plus tests.
+
+| Target | Path | Responsibility |
+|---|---|---|
+| `HavenCore` | `Sources/HavenCore/` | Pure domain types: `Agent`, `TaskContext`, `TaskEvent`, `Outcome`, `AgentRequest`, `Pin`, `BriefBuilder`. No I/O. |
+| `HavenRuntime` | `Sources/HavenRuntime/` | `ProcessSupervisor` (process groups, cancel, timeout), `AgentAdapter` and output parsers, `ClaudeCodeAdapter` (structured `stream-json`), `AgentRunner`, `AgentRegistry` |
+| `Haven` | `Sources/Haven/` | The app: UI, hotkeys, context capture, task store |
+| `HavenRuntimeTests` | `Tests/HavenRuntimeTests/` | Parser contract tests against a recorded Claude Code run, and supervisor tests |
+
+App components in `Sources/Haven/`:
 
 | Component | File | Responsibility |
 |---|---|---|
@@ -110,7 +121,7 @@ All sources live in `Sources/Haven/`.
 | Global shortcut | `HotKey.swift` | Registers ⌥Space through Carbon `RegisterEventHotKey`; needs no extra permission |
 | Context capture | `ContextCapture.swift` | Reads the frontmost app, and the focused element's selected text via the Accessibility API when trusted |
 | Composer | `ComposerPanel.swift` | Borderless floating `NSPanel` with context chip, agent picker and input; Return submits, Esc closes |
-| Task engine | `TaskStore.swift` | `Agent` command mapping, `HavenTask` model and state, background process execution, and an `onChange` callback for UI updates |
+| Task store | `TaskStore.swift` | `HavenTask` model; starts runs through adapters and applies the resulting `TaskEvent`s; cancel, rerun, clear; `onChange` callback for UI |
 | Annotate | `AnnotateOverlay.swift`, `ElementProbe.swift`, `Brief.swift` | Full-screen overlay per display; hit-tests the window under the pointer and its Accessibility element; collects numbered pins and notes; builds a markdown and JSON brief that labels captured content as untrusted data |
 | Onboarding and settings | `OnboardingWindow.swift`, `SettingsWindow.swift`, `AgentDetector.swift`, `Preferences.swift` | First-run steps, installed-CLI detection, default agent and pill toggle |
 | Design tokens | `Theme.swift` | Shared fonts, radii, status colors and vibrancy helper |
@@ -142,7 +153,7 @@ HavenTask
 2. `HotKey` fires; `AppDelegate` calls `ContextCapture.capture()` while the previous app is still frontmost.
 3. `ComposerPanel` appears with the captured context shown.
 4. User picks an agent, types an instruction, presses Return.
-5. `TaskStore` builds a prompt (instruction, app name, selected text) and spawns the agent CLI through a login shell.
+5. `TaskStore` builds a prompt (instruction, app name, selected text, annotation brief) and asks `AgentRunner` to launch the agent's adapter. The CLI runs in its own process group through a login shell, and its output is parsed into `TaskEvent`s (text, tool use, finished).
 6. The composer closes. The task runs in the background; the status pill shows the running count and the menu lists recent tasks.
 7. Clicking the pill (or **Show Tasks…** in the menu) opens the Task Center, where output streams live.
 8. On exit, the task becomes `done` (exit code 0) or `failed`, and its output is stored on the task.
@@ -168,6 +179,14 @@ swift run
 ```
 
 A house icon appears in the menu bar. Press **⌥Space** to open the composer.
+
+Run the tests (with only the Command Line Tools installed, the testing macro plugin path must be passed explicitly):
+
+```bash
+swift test -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing
+```
+
+With full Xcode, plain `swift test` works.
 
 ## Documentation and Site
 

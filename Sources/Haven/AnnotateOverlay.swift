@@ -1,4 +1,5 @@
 import AppKit
+import HavenCore
 
 /// Annotate mode (docs/design.md §13): dim the screen, hover to highlight, click or drag to
 /// place numbered pins, add a note per pin, then send everything as one brief.

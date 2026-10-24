@@ -1,4 +1,5 @@
 import AppKit
+import HavenCore
 
 /// Borderless floating panel with a text field, agent picker and context chip.
 /// Plain AppKit so the project builds with just the Command Line Tools.

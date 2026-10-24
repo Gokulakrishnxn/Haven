@@ -1,4 +1,5 @@
 import AppKit
+import HavenCore
 
 /// Minimal preferences: default agent, status pill, and shortcut reference.
 final class SettingsWindow: NSWindowController {

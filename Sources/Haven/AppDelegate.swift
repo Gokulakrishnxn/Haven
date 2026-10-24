@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import HavenCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = TaskStore()

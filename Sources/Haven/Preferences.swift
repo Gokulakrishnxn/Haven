@@ -1,4 +1,5 @@
 import Foundation
+import HavenCore
 
 enum Preferences {
     private static let d = UserDefaults.standard
