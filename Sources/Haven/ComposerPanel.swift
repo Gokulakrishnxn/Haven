@@ -29,17 +29,17 @@ final class ComposerPanel: NSPanel, NSTextFieldDelegate {
         blur.material = .hudWindow
         blur.state = .active
         blur.wantsLayer = true
-        blur.layer?.cornerRadius = 14
+        blur.layer?.cornerRadius = Theme.radiusPanel
         blur.layer?.masksToBounds = true
         contentView = blur
 
-        contextLabel.font = .systemFont(ofSize: 11)
+        contextLabel.font = Theme.captionFont
         contextLabel.textColor = .secondaryLabelColor
         contextLabel.lineBreakMode = .byTruncatingTail
         contextLabel.maximumNumberOfLines = 2
 
         field.placeholderString = "What should Haven do?"
-        field.font = .systemFont(ofSize: 18)
+        field.font = Theme.inputFont
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
@@ -48,9 +48,7 @@ final class ComposerPanel: NSPanel, NSTextFieldDelegate {
         picker.addItems(withTitles: Agent.allCases.map(\.rawValue))
         picker.controlSize = .small
 
-        let hint = NSTextField(labelWithString: "↩ run   ⎋ close")
-        hint.font = .systemFont(ofSize: 11)
-        hint.textColor = .secondaryLabelColor
+        let hint = Theme.label("↩ Run   ⌘↩ Run another   ⎋ Close", font: Theme.captionFont, color: .secondaryLabelColor)
 
         let bottom = NSStackView(views: [picker, NSView(), hint])
         let stack = NSStackView(views: [contextLabel, field, bottom])
@@ -72,6 +70,7 @@ final class ComposerPanel: NSPanel, NSTextFieldDelegate {
     func present(context: TaskContext, onSubmit: @escaping (Agent, String) -> Void) {
         self.onSubmit = onSubmit
         field.stringValue = ""
+        picker.selectItem(withTitle: Preferences.defaultAgent.rawValue)
 
         var lines: [String] = []
         if let app = context.appName { lines.append("From \(app)") }
@@ -95,8 +94,14 @@ final class ComposerPanel: NSPanel, NSTextFieldDelegate {
             let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return true }
             let agent = Agent.allCases[picker.indexOfSelectedItem]
-            orderOut(nil)
+            Preferences.defaultAgent = agent
             onSubmit?(agent, text)
+            // ⌘↩ keeps the composer open so another task can be started right away.
+            if NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+                field.stringValue = ""
+            } else {
+                orderOut(nil)
+            }
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             orderOut(nil)
