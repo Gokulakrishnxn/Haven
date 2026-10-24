@@ -28,6 +28,7 @@ final class HavenTask: ObservableObject, Identifiable {
     var prompt: String {
         var parts = [instruction]
         if let app = context.appName { parts.append("Context app: \(app)") }
+        if let tab = context.tab { parts.append("Browser tab: \(tab.title)\nURL: \(tab.url)") }
         if let text = context.selectedText { parts.append("Selected text:\n\(text)") }
         if !context.files.isEmpty {
             parts.append("Attached files (read them as needed):\n" + context.files.map { "- \($0)" }.joined(separator: "\n"))

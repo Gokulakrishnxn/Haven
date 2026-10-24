@@ -7,6 +7,9 @@ public struct ComposerSubmission {
     public var model: String?
     public var text: String
     public var files: [URL]
+    /// What is still attached after the user removed any chips.
+    public var selection: String?
+    public var tab: BrowserTab?
 }
 
 /// State behind the composer. The app creates one and updates it each time the panel opens.
@@ -16,6 +19,7 @@ public final class ComposerModel: ObservableObject {
     @Published public var model: String?
     @Published public var appName: String?
     @Published public var selection: String?
+    @Published public var tab: BrowserTab?
     @Published public var files: [URL] = []
     @Published public var isDropTargeted = false
     @Published public var quickActions: [QuickAction] = []
@@ -32,7 +36,7 @@ public final class ComposerModel: ObservableObject {
     public func submit(keepOpen: Bool) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        onSubmit(ComposerSubmission(agent: agent, model: model, text: trimmed, files: files), keepOpen)
+        onSubmit(ComposerSubmission(agent: agent, model: model, text: trimmed, files: files, selection: selection, tab: tab), keepOpen)
         text = ""
         files = []
     }
@@ -40,7 +44,7 @@ public final class ComposerModel: ObservableObject {
     /// Runs a saved action immediately with the current context.
     public func run(_ action: QuickAction) {
         onSubmit(ComposerSubmission(agent: action.agent ?? agent, model: action.model ?? (action.agent == nil ? model : nil),
-                                    text: action.prompt, files: files), false)
+                                    text: action.prompt, files: files, selection: selection, tab: tab), false)
         files = []
     }
 
@@ -69,7 +73,7 @@ public struct ComposerView: View {
     public init(model: ComposerModel) { self.model = model }
 
     private var canRun: Bool { !model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    private var hasContext: Bool { model.appName != nil || model.selection != nil || !model.files.isEmpty }
+    private var hasContext: Bool { model.appName != nil || model.selection != nil || model.tab != nil || !model.files.isEmpty }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -122,6 +126,10 @@ public struct ComposerView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 if let app = model.appName { ContextChip(icon: "macwindow", text: app) }
+                if let tab = model.tab {
+                    ContextChip(icon: "globe", text: tab.title.isEmpty ? tab.url : String(tab.title.prefix(40)),
+                                onRemove: { model.tab = nil })
+                }
                 if let sel = model.selection {
                     ContextChip(icon: "text.quote", text: String(sel.prefix(60)), onRemove: { model.selection = nil })
                 }

@@ -6,7 +6,7 @@ import HavenUI
 /// Borderless floating panel hosting the SwiftUI composer.
 final class ComposerPanel: NSPanel {
     private let model = ComposerModel()
-    private var onSubmit: ((Agent, String?, String, [URL]) -> Void)?
+    private var onSubmit: ((ComposerSubmission) -> Void)?
     /// Called when the user taps the annotate button.
     var onAnnotate: (() -> Void)?
 
@@ -35,7 +35,7 @@ final class ComposerPanel: NSPanel {
         model.onSubmit = { [weak self] submission, keepOpen in
             Preferences.defaultAgent = submission.agent
             Preferences.defaultModel = submission.model
-            self?.onSubmit?(submission.agent, submission.model, submission.text, submission.files)
+            self?.onSubmit?(submission)
             if !keepOpen { self?.orderOut(nil) }
         }
         model.onAnnotate = { [weak self] in
@@ -52,7 +52,7 @@ final class ComposerPanel: NSPanel {
         }
     }
 
-    func present(context: TaskContext, onSubmit: @escaping (Agent, String?, String, [URL]) -> Void) {
+    func present(context: TaskContext, onSubmit: @escaping (ComposerSubmission) -> Void) {
         self.onSubmit = onSubmit
         model.text = ""
         model.files = []
@@ -61,6 +61,7 @@ final class ComposerPanel: NSPanel {
         model.model = Preferences.defaultModel
         model.appName = context.appName
         model.selection = context.selectedText
+        model.tab = context.tab
 
         if let screen = NSScreen.main {
             let f = screen.visibleFrame

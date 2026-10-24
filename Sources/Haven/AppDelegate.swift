@@ -101,10 +101,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showComposer() {
         guard !annotate.isActive else { return }
         let context = ContextCapture.capture()
-        panel.present(context: context) { [store] agent, model, text, files in
+        panel.present(context: context) { [store] submission in
             var ctx = context
-            ctx.files = files.map(\.path)
-            store.start(agent: agent, model: model, instruction: text, context: ctx)
+            ctx.selectedText = submission.selection
+            ctx.tab = submission.tab
+            ctx.files = submission.files.map(\.path)
+            store.start(agent: submission.agent, model: submission.model, instruction: submission.text, context: ctx)
         }
     }
 
