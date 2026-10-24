@@ -111,7 +111,7 @@ final class TaskStore: ObservableObject {
         var allowed: [String] = []
         if let note = loginNote?() {
             prompt += "\n\n" + note
-            allowed = ["haven-vault"]
+            allowed = ["haven-vault", "haven-mac"]
             if let dir = helperDirectory { environment["HAVEN_HELPER_DIR"] = dir }
         }
         let request = AgentRequest(prompt: prompt, model: model, workingDirectory: Preferences.workingFolderURL,

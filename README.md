@@ -62,7 +62,8 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Approval: agents run `haven-vault approve` before risky actions; an approval card appears and the answer is audited (120 s timeout counts as Deny) | Implemented; verified end to end with a real Claude task (Allow path via a dev flag) |
 | Custom global shortcuts with a recorder in Settings | Implemented (record UI not yet tried by hand) |
 | MCP servers (command or web address) enabled in Settings are passed to Claude tasks | Implemented; Claude confirmed loading the config; no real server tried |
-| Mac control tools for agents (snapshot, click, type) and a browser extension | Planned |
+| Mac control for agents with `haven-mac`: snapshot, click, type, key, scroll, list and open apps | Implemented; verified end to end (a real Claude task opened Calculator, read it and clicked a button) |
+| Browser extension for page-level control | Planned |
 | Per-action approval policy (auto-allow classes) | Planned |
 | MCP and skills per task | Planned |
 
@@ -159,6 +160,27 @@ Agents are told to run `haven-vault approve --action "<what>" --reason "<why>"` 
 ### Tools (MCP)
 
 Settings > Tools lists MCP servers you connect, as a command (for example `npx -y @modelcontextprotocol/server-filesystem ~/Documents`) or a web address. Enabled servers are written to a per-task config file and passed to Claude with `--mcp-config`. Other agents do not use them yet.
+
+### Mac control
+
+Agents see and control apps with `haven-mac`:
+
+| Command | What it does |
+|---|---|
+| `status`, `list-apps`, `list-windows` | What is running and whether Accessibility is on |
+| `snapshot [--app NAME]` | Text outline of the app's front window, with `[eN]` references for buttons, fields, links and so on |
+| `click --ref eN` or `--x N --y N` | Press an element (falls back to a mouse click at its center) |
+| `type --text "…" [--ref eN]` | Type as key events; refuses password fields |
+| `key --combo cmd+s`, `scroll --dy N` | Key combinations and scrolling |
+| `open-app`, `activate-app --name NAME` | Launch or raise an app |
+
+How it stays safe:
+- Only a running Haven task can call it, and reading (`list-*`, `snapshot`) needs no prompt but is audited.
+- The first command that changes anything asks once per task: "see and control apps on your Mac" with **Allow for this task**.
+- Password managers, Keychain Access and System Settings can never be read or controlled, and typing into password fields is refused (use `haven-vault`).
+- Every action is in the audit log; typed text is recorded as a character count only.
+- Snapshots send window contents to whichever model the agent uses, so use it on windows you are comfortable sharing.
+- Chromium-based apps (Chrome, Electron apps) expose their page elements only after Haven asks, so the first snapshot can be thin. No screenshots yet (that needs Screen Recording).
 
 ### Secure sign-in
 

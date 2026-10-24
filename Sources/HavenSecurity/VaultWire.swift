@@ -11,10 +11,14 @@ public struct WireRequest: Codable, Sendable {
     public var task: String
     /// For "approve": one line saying what the agent wants to do.
     public var summary: String
+    /// For "mac": the command (see `MacCommand`) and its options.
+    public var command: String
+    public var args: [String: String]
 
     public init(action: String = "login", site: String = "", field: FillField = .password, reason: String = "",
-                task: String, summary: String = "") {
+                task: String, summary: String = "", command: String = "", args: [String: String] = [:]) {
         self.action = action; self.site = site; self.field = field; self.reason = reason; self.task = task; self.summary = summary
+        self.command = command; self.args = args
     }
 
     // Missing fields fall back to defaults so each action only sends what it needs.
@@ -26,6 +30,8 @@ public struct WireRequest: Codable, Sendable {
         reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
         task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
+        args = try c.decodeIfPresent([String: String].self, forKey: .args) ?? [:]
     }
 }
 
