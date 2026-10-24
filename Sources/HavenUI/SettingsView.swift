@@ -3,7 +3,7 @@ import HavenCore
 
 public enum SettingsSection: String, CaseIterable, Identifiable {
     case profile = "Profile", general = "General", agents = "Agents", quickActions = "Quick Actions"
-    case logins = "Logins", audit = "Audit Log", tools = "Tools"
+    case logins = "Logins", audit = "Audit Log", tools = "Tools", browser = "Browser"
     case shortcuts = "Shortcuts", privacy = "Privacy", about = "About"
 
     public var id: String { rawValue }
@@ -16,6 +16,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable {
         case .quickActions: return "bolt"
         case .logins: return "key"
         case .tools: return "puzzlepiece.extension"
+        case .browser: return "globe"
         case .audit: return "list.bullet.rectangle"
         case .shortcuts: return "command"
         case .privacy: return "hand.raised"
@@ -71,6 +72,8 @@ public final class SettingsModel: ObservableObject {
     @Published public var taskCount = 0
     @Published public var quickActions: [QuickAction] = []
     @Published public var mcpServers: [MCPServerConfig] = []
+    @Published public var browserToken = ""
+    @Published public var browserConnected = false
     @Published public var credentials: [CredentialRow] = []
     @Published public var auditRows: [AuditRow] = []
     /// False if the audit log's hash chain no longer verifies.
@@ -90,6 +93,10 @@ public final class SettingsModel: ObservableObject {
     public var onAddCredential: (_ label: String, _ site: String, _ username: String, _ password: String) -> Void = { _, _, _, _ in }
     public var onDeleteCredential: (UUID) -> Void = { _ in }
     public var onRefreshAudit: () -> Void = {}
+    public var onCopyBrowserToken: () -> Void = {}
+    public var onRegenerateBrowserToken: () -> Void = {}
+    public var onShowExtensionFolder: () -> Void = {}
+    public var onOpenChromeExtensions: () -> Void = {}
     public var onAddMCP: (_ name: String, _ kind: MCPServerConfig.Kind, _ commandLine: String, _ url: String) -> Void = { _, _, _, _ in }
     public var onSetMCPEnabled: (UUID, Bool) -> Void = { _, _ in }
     public var onDeleteMCP: (UUID) -> Void = { _ in }
@@ -128,6 +135,7 @@ public struct SettingsView: View {
                 case .agents: AgentsPane(model: model)
                 case .quickActions: QuickActionsPane(model: model)
                 case .tools: ToolsPane(model: model)
+                case .browser: BrowserPane(model: model)
                 case .logins: LoginsPane(model: model)
                 case .audit: AuditPane(model: model)
                 case .shortcuts: ShortcutsPane(model: model)
@@ -583,6 +591,52 @@ struct ToolsPane: View {
                 Text("Enabled servers are given to Claude tasks. Other agents don't use them yet.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+// MARK: Browser extension
+
+struct BrowserPane: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 10) {
+                    Circle().fill(model.browserConnected ? Color.green : Color.orange).frame(width: 9, height: 9)
+                    Text(model.browserConnected ? "Chrome extension connected" : "Chrome extension not connected").font(.headline)
+                }
+                Text("With the extension, agents can read and act on web pages, only on sites you connect from the extension's popup, and never on password fields.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section("Set up") {
+                step(1, "Show the extension folder", button: "Show Folder", action: model.onShowExtensionFolder)
+                step(2, "In Chrome, turn on Developer mode and choose Load unpacked, then pick that folder", button: "Open Extensions", action: model.onOpenChromeExtensions)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("3  Open the Haven extension's options and paste this pairing code").font(.callout)
+                    HStack {
+                        Text(model.browserToken).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                            .lineLimit(1).truncationMode(.middle)
+                            .padding(8).background(HavenTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+                        Button("Copy", action: model.onCopyBrowserToken)
+                    }
+                }
+                step(4, "On a site you want agents to use, click the Haven icon and choose Connect this site", button: nil, action: {})
+            }
+            Section {
+                Button("Make a New Pairing Code", action: model.onRegenerateBrowserToken)
+                Text("A new code disconnects the extension until you paste it again. The code never leaves this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func step(_ n: Int, _ text: String, button: String?, action: @escaping () -> Void) -> some View {
+        HStack {
+            Text("\(n)  \(text)").font(.callout).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 12)
+            if let button { Button(button, action: action) }
         }
     }
 }

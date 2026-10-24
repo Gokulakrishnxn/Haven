@@ -86,6 +86,24 @@ final class SettingsWindow: NSWindowController {
             self?.mcp.delete(id)
             self?.model.mcpServers = self?.mcp.servers ?? []
         }
+        model.browserToken = vault.pairingToken
+        model.onCopyBrowserToken = { [weak self] in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(self?.vault.pairingToken ?? "", forType: .string)
+        }
+        model.onRegenerateBrowserToken = { [weak self] in
+            self?.vault.regenerateToken()
+            self?.model.browserToken = self?.vault.pairingToken ?? ""
+        }
+        model.onShowExtensionFolder = {
+            if let url = ExtensionLocator.folderURL() { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        }
+        model.onOpenChromeExtensions = {
+            let ws = NSWorkspace.shared
+            if let chrome = ws.urlForApplication(withBundleIdentifier: "com.google.Chrome"), let page = URL(string: "chrome://extensions") {
+                ws.open([page], withApplicationAt: chrome, configuration: NSWorkspace.OpenConfiguration())
+            }
+        }
         model.onRefreshAudit = { [weak self] in self?.reloadVault() }
         model.onClearHistory = { [weak self] in self?.store.clearFinished() }
         model.onOpenRepo = {
@@ -118,6 +136,7 @@ final class SettingsWindow: NSWindowController {
     private func refresh() {
         if model.quickActions != quickActions.actions { model.quickActions = quickActions.actions }
         model.accessibilityGranted = AXIsProcessTrusted()
+        model.browserConnected = vault.bridge.isConnected
         model.screenRecordingGranted = CGPreflightScreenCaptureAccess()
         model.taskCount = store.startedCount
     }
