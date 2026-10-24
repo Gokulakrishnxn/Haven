@@ -18,12 +18,15 @@ public enum TaskEvent: Equatable, Sendable {
 /// Input to an agent run.
 public struct AgentRequest: Sendable {
     public var prompt: String
+    /// Model id for the agent, or nil for its default.
+    public var model: String?
     public var workingDirectory: URL?
     /// Seconds before the run is stopped. nil means no limit.
     public var timeout: TimeInterval?
 
-    public init(prompt: String, workingDirectory: URL? = nil, timeout: TimeInterval? = 3600) {
+    public init(prompt: String, model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval? = 3600) {
         self.prompt = prompt
+        self.model = model
         self.workingDirectory = workingDirectory
         self.timeout = timeout
     }
