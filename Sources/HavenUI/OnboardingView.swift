@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import HavenCore
 
 public final class OnboardingModel: ObservableObject {
@@ -6,6 +7,8 @@ public final class OnboardingModel: ObservableObject {
     /// nil while detection is running.
     @Published public var detected: Set<Agent>?
     @Published public var accessibilityGranted = false
+    /// The app icon artwork, supplied by the app bundle.
+    public var appIcon: NSImage?
 
     public var onGrantAccessibility: () -> Void = {}
     public var onFinish: () -> Void = {}
@@ -47,22 +50,38 @@ public struct OnboardingView: View {
             }
         }
         .padding(36)
-        .frame(width: 480, height: 380)
+        .frame(width: 520, height: 540)
         .background(VisualEffectBackground(material: .windowBackground))
     }
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Image(systemName: "house.circle.fill").font(.system(size: 44)).foregroundStyle(.tint)
-            Text("Welcome to Haven").font(.system(size: 28, weight: .bold))
-            Text("Point at anything. Haven does the rest.").font(.title3).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 8) {
-                KeyHint("⌥Space", "Ask from any app")
-                KeyHint("⌥⇧Space", "Point at what you mean")
-            }.padding(.top, 6)
-            Text("Tasks keep running in the background. A small pill at the top of the screen shows progress.")
-                .foregroundStyle(.secondary)
+        VStack(spacing: 18) {
+            Group {
+                if let icon = model.appIcon {
+                    Image(nsImage: icon).resizable().interpolation(.high).scaledToFit()
+                } else {
+                    HavenLogo(animated: true).foregroundStyle(.tint)
+                }
+            }
+            .frame(width: 92, height: 92)
+            .shadow(color: .black.opacity(0.25), radius: 14, y: 8)
+
+            VStack(spacing: 6) {
+                Text("Welcome to Haven").font(.system(size: 30, weight: .bold))
+                Text("Point at anything. Haven does the rest.").font(.title3).foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                WelcomeFeature(icon: "plus.bubble.fill", title: "Ask from any app",
+                               detail: "Press ⌥Space. Haven opens over your work with the context already attached.")
+                WelcomeFeature(icon: "scope", title: "Point at what you mean",
+                               detail: "Press ⌥⇧Space, click or drag over anything, add a note, and send.")
+                WelcomeFeature(icon: "rectangle.topthird.inset.filled", title: "Let it run",
+                               detail: "Tasks keep going in the background. Open the notch bar any time to see the output.")
+            }
+            .padding(.top, 4)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var agents: some View {
@@ -72,11 +91,12 @@ public struct OnboardingView: View {
             if let found = model.detected {
                 ForEach(Agent.allCases) { agent in
                     HStack(spacing: 10) {
-                        Image(systemName: found.contains(agent) ? "checkmark.circle.fill" : "circle.dashed")
-                            .foregroundStyle(found.contains(agent) ? .green : .secondary)
-                        Text(agent.rawValue)
+                        AgentIcon(agent, size: 22)
+                        Text(agent.displayName)
                         Spacer()
                         Text(found.contains(agent) ? "Found" : "Not installed").foregroundStyle(.secondary)
+                        Image(systemName: found.contains(agent) ? "checkmark.circle.fill" : "circle.dashed")
+                            .foregroundStyle(found.contains(agent) ? .green : .secondary)
                     }
                     .padding(12)
                     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
@@ -96,6 +116,26 @@ public struct OnboardingView: View {
                    action: model.onGrantAccessibility)
                 .disabled(model.accessibilityGranted)
             Text("You can skip this. Haven still works without it.").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct WelcomeFeature: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 17))
+                .foregroundStyle(.tint)
+                .frame(width: 30, height: 30)
+                .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 14, weight: .semibold))
+                Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }

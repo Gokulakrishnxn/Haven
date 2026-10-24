@@ -59,11 +59,11 @@ struct TaskRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            StatusDot(item.state)
+            AgentIcon(item.agent, size: 20)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                    Text("\(item.agent.rawValue) · \(formatElapsed(item.elapsed(at: ctx.date)))")
+                    Text("\(item.agent.displayName) · \(item.state.rawValue) · \(formatElapsed(item.elapsed(at: ctx.date)))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -92,9 +92,10 @@ struct TaskDetailView: View {
                     }
                 }
                 HStack(spacing: 8) {
+                    AgentIcon(task.agent, size: 16)
                     StatusDot(task.state)
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        Text("\(task.agent.rawValue) · \(task.state.rawValue) · \(formatElapsed(task.elapsed(at: ctx.date)))")
+                        Text("\(task.agent.displayName) · \(task.state.rawValue) · \(formatElapsed(task.elapsed(at: ctx.date)))")
                     }
                 }
                 .font(.callout).foregroundStyle(.secondary)
