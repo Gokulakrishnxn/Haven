@@ -260,7 +260,7 @@ cd Haven
 swift run
 ```
 
-A house icon appears in the menu bar. Press **⌥Space** to open the composer.
+The Haven H icon appears in the menu bar. Press **⌥Space** to open the composer.
 
 Run the tests (with only the Command Line Tools installed, the testing macro plugin path must be passed explicitly):
 
@@ -269,6 +269,14 @@ swift test -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/us
 ```
 
 With full Xcode, plain `swift test` works.
+
+## Visual identity
+
+Haven’s soft H companion appears in the menu bar, welcome screen, Task Center, status pill, and landing site. The animated version gently breathes and blinks, and respects Reduce Motion. The menu bar uses a static monochrome template for clarity at small sizes.
+
+- [Brand assets and usage](brand/README.md): SVG logos and wordmarks, four app-icon variants, animated SVG/GIF, PNGs, and macOS ICNS/iconset.
+- Live logo and motion preview: run the landing site and open `/brand`.
+- Build a local app with its Finder icon: `scripts/build-app.sh` → `.build/Haven.app`. See [packaging](docs/packaging.md).
 
 ## Documentation and Site
 
