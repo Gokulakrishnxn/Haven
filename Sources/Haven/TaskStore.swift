@@ -44,11 +44,16 @@ final class HavenTask: ObservableObject, Identifiable {
 /// Runs each task as its own background process so one failure never blocks others.
 final class TaskStore: ObservableObject {
     @Published private(set) var tasks: [HavenTask] = []
+    /// Called on the main thread whenever a task is added or changes status.
+    var onChange: (() -> Void)?
+
+    var runningCount: Int { tasks.filter { $0.status == .working }.count }
 
     func start(agent: Agent, instruction: String, context: TaskContext) {
         let task = HavenTask(agent: agent, instruction: instruction, context: context)
         tasks.insert(task, at: 0)
         run(task)
+        onChange?()
     }
 
     private func run(_ task: HavenTask) {
@@ -67,6 +72,7 @@ final class TaskStore: ObservableObject {
                 task?.output = String(decoding: data, as: UTF8.self)
                 task?.status = proc.terminationStatus == 0 ? .done : .failed
                 self?.objectWillChange.send()
+                self?.onChange?()
             }
         }
         do {
@@ -74,6 +80,7 @@ final class TaskStore: ObservableObject {
         } catch {
             task.output = error.localizedDescription
             task.status = .failed
+            onChange?()
         }
     }
 }
