@@ -91,6 +91,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         }
+        // HAVEN_PROBE="x,y" prints what Annotate would see at that screen point (twice, 1.5 s apart), then quits.
+        if let probe = ProcessInfo.processInfo.environment["HAVEN_PROBE"]?.split(separator: ",").compactMap({ Double($0) }), probe.count == 2 {
+            let point = CGPoint(x: probe[0], y: probe[1])
+            ElementProbe.prepareVisibleApps()
+            for delay in [0.2, 1.7] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    let e = ElementProbe.element(at: point)
+                    print("probe@\(delay)s app=\(e?.app ?? "-") role=\(e?.role ?? "-") title=\(e?.title ?? "-") frame=\(e?.frame.map { "\($0)" } ?? "none")")
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { NSApp.terminate(nil) }
+        }
         switch ProcessInfo.processInfo.environment["HAVEN_SHOW"] {
         case "composer": showComposer()
         case "tasks": outputWindow.show()
