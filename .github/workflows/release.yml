@@ -1,0 +1,37 @@
+name: Release
+
+# Push a tag like v0.2.0 to build the app and attach Haven-0.2.0.zip to a GitHub release.
+# Haven's built-in update check looks at the latest release, so publishing one is how users find out.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match VERSION
+        run: |
+          expected="v$(tr -d '[:space:]' < VERSION)"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match VERSION ($expected). Update VERSION and tag again." >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: swift test
+
+      - name: Build the app
+        run: HAVEN_ZIP=1 ./scripts/build-app.sh "$RUNNER_TEMP/dist"
+        # To sign with a Developer ID, import the certificate into a keychain first and set
+        # SIGN_IDENTITY here. Without it the app carries an ad-hoc signature (see docs/packaging.md).
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/dist/Haven-$(tr -d '[:space:]' < VERSION).zip" --generate-notes --title "Haven ${GITHUB_REF_NAME#v}"
