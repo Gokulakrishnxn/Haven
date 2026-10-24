@@ -278,4 +278,10 @@ Short, declarative, human. Say what happened and what's next. Avoid "AI", "assis
 
 ## Part III — Landing site
 
-Next.js (App Router, TypeScript) in `site/`. Static export, no tracking. Sections: hero, point-to-act demo, one-shortcut, agent choice, annotate, security, capabilities, FAQ, download. Visual language mirrors the app: SF-style typography, restrained palette, generous space, glass surfaces, reduced-motion support.
+`site/`: Next.js (App Router, TypeScript), statically prerendered, no tracking.
+
+**Stack (shared with the Aria project for consistency):** Tailwind CSS v4, shadcn `radix-nova` primitives (`Button`, `Card`, plus an `Accordion` built on `radix-ui`), `lucide-react` icons, `motion` for the hero demo, and the same neutral oklch token set, following the system light or dark appearance.
+
+**Sections:** hero with animated shortcut-to-pill demo, "new gesture" statement, Anywhere, Annotate, Detach, Bring your own brain, Security, capabilities grid, FAQ, closing call to action.
+
+**Principles:** SF system typography, restrained monochrome with semantic status colors (working, approval, done), generous space, glass surfaces, `prefers-reduced-motion` respected, semantic landmarks and keyboard-operable accordion.
