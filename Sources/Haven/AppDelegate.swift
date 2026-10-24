@@ -84,9 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                              instruction: action?.prompt ?? "Explain this clearly and concisely.", context: context)
         }
         selectionPopup.start()
-        store.loginNote = { [weak self] in
-            (self?.vaultController.hasLogins ?? false) ? VaultController.agentNote : nil
-        }
+        store.loginNote = { [weak self] in VaultController.agentNote(hasLogins: self?.vaultController.hasLogins ?? false) }
         store.helperDirectory = Bundle.main.executableURL?.deletingLastPathComponent().path
         vaultController.start()
         notch.update(items: [])
