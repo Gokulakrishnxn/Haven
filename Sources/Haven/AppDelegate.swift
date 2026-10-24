@@ -123,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { NSApp.terminate(nil) }
         }
+        if let script = ProcessInfo.processInfo.environment["HAVEN_BROWSER_SCRIPT"] { vaultController.runBrowserScript(script) }
         switch ProcessInfo.processInfo.environment["HAVEN_SHOW"] {
         case "composer": if ProcessInfo.processInfo.environment["HAVEN_RUN"] == nil { showComposer() }
         case "tasks": outputWindow.show()

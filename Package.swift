@@ -19,6 +19,8 @@ let package = Package(
         .executableTarget(name: "haven-vault", dependencies: ["HavenSecurity"], path: "Sources/HavenVault"),
         // Command-line helper agents run to see and control apps. Requests go through the app, which asks the person first.
         .executableTarget(name: "haven-mac", dependencies: ["HavenSecurity"], path: "Sources/HavenMac"),
+        // Command-line helper agents run to work in the browser through the Haven extension.
+        .executableTarget(name: "haven-browser", dependencies: ["HavenSecurity"], path: "Sources/HavenBrowser"),
         .testTarget(name: "HavenSecurityTests", dependencies: ["HavenCore", "HavenRuntime", "HavenSecurity"], path: "Tests/HavenSecurityTests"),
         .testTarget(
             name: "HavenRuntimeTests",
