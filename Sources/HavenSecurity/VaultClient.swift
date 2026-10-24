@@ -25,7 +25,7 @@ public enum VaultClient {
             if n <= 0 { break }
             data.append(contentsOf: buffer[0..<n])
         }
-        let line = data.split(separator: 0x0A, maxSplits: 1).first.map(Data.init) ?? Data()
+        let line = data.firstLine
         return (try? JSONDecoder().decode(WireResponse.self, from: line))
             ?? WireResponse(ok: false, message: "No answer from Haven.")
     }

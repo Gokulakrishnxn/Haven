@@ -95,3 +95,12 @@ import Testing
         #expect(response.message == big)
     }
 }
+
+@Suite struct FirstLineTests {
+    @Test func takesTheTextBeforeTheFirstNewline() {
+        #expect(Data("one\ntwo\n".utf8).firstLine == Data("one".utf8))
+        #expect(Data("only".utf8).firstLine == Data("only".utf8))
+        #expect(Data("\nrest".utf8).firstLine == Data())
+        #expect(Data().firstLine == Data())
+    }
+}

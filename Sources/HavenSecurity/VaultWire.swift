@@ -61,3 +61,12 @@ public enum VaultSocket {
         return addr
     }
 }
+
+extension Data {
+    /// Everything before the first newline. Written with `firstIndex` because `split(separator:maxSplits:)` on `Data`
+    /// is ambiguous to some Swift toolchains.
+    var firstLine: Data {
+        guard let newline = firstIndex(of: 0x0A) else { return self }
+        return Data(self[startIndex..<newline])
+    }
+}
