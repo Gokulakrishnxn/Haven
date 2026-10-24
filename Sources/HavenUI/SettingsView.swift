@@ -79,6 +79,11 @@ public final class SettingsModel: ObservableObject {
     /// False if the audit log's hash chain no longer verifies.
     @Published public var auditIntact = true
     @Published public var version = "0.1.0"
+    @Published public var autoUpdateCheck: Bool { didSet { onChange() } }
+    /// One line about the last update check, or empty.
+    @Published public var updateStatus = ""
+    @Published public var updateAvailable = false
+    @Published public var checkingForUpdate = false
 
     public var onChange: () -> Void = {}
     public var onChooseFolder: () -> Void = {}
@@ -87,6 +92,8 @@ public final class SettingsModel: ObservableObject {
     public var onOpenScreenRecording: () -> Void = {}
     public var onClearHistory: () -> Void = {}
     public var onOpenRepo: () -> Void = {}
+    public var onCheckForUpdates: () -> Void = {}
+    public var onOpenUpdate: () -> Void = {}
     public var onUpdateAction: (QuickAction) -> Void = { _ in }
     public var onDeleteAction: (UUID) -> Void = { _ in }
     public var onAddAction: () -> Void = {}
@@ -102,7 +109,9 @@ public final class SettingsModel: ObservableObject {
     public var onDeleteMCP: (UUID) -> Void = { _ in }
 
     public init(displayName: String, email: String, agent: Agent, showPill: Bool, workingFolder: String,
-                composeShortcut: Shortcut = .composeDefault, annotateShortcut: Shortcut = .annotateDefault) {
+                composeShortcut: Shortcut = .composeDefault, annotateShortcut: Shortcut = .annotateDefault,
+                autoUpdateCheck: Bool = true) {
+        self.autoUpdateCheck = autoUpdateCheck
         self.composeShortcut = composeShortcut
         self.annotateShortcut = annotateShortcut
         self.displayName = displayName
@@ -335,13 +344,29 @@ struct AboutPane: View {
         Form {
             Section {
                 VStack(spacing: 8) {
-                    Image(systemName: "house.circle.fill").font(.system(size: 52)).foregroundStyle(.tint)
+                    HavenLogo().frame(width: 56, height: 56)
                     Text("Haven").font(.title2.weight(.bold))
                     Text("Version \(model.version)").foregroundStyle(.secondary)
                     Text("Point at anything. Haven does the rest.").font(.callout).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
+            }
+            Section("Updates") {
+                HStack {
+                    if model.checkingForUpdate { ProgressView().controlSize(.small) }
+                    Text(model.updateStatus.isEmpty ? "Haven has not checked yet." : model.updateStatus)
+                        .font(.callout).foregroundStyle(model.updateAvailable ? Color.green : Color.secondary)
+                    Spacer()
+                    if model.updateAvailable {
+                        Button("Download", action: model.onOpenUpdate)
+                    } else {
+                        Button("Check Now", action: model.onCheckForUpdates).disabled(model.checkingForUpdate)
+                    }
+                }
+                Toggle("Check for updates automatically", isOn: $model.autoUpdateCheck)
+                Text("Once a day Haven asks GitHub for the latest release. Nothing about you or your Mac is sent. Updates are never installed for you; the link opens the release page.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Button("View on GitHub", action: model.onOpenRepo)

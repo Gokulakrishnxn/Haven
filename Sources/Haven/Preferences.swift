@@ -63,4 +63,15 @@ enum Preferences {
     private static func setShortcut(_ value: Shortcut, _ key: String) {
         d.set(try? JSONEncoder().encode(value), forKey: key)
     }
+
+    /// Whether Haven asks GitHub for a newer release once a day. On by default.
+    static var autoUpdateCheck: Bool {
+        get { d.object(forKey: "autoUpdateCheck") as? Bool ?? true }
+        set { d.set(newValue, forKey: "autoUpdateCheck") }
+    }
+
+    static var lastUpdateCheck: Date? {
+        get { d.object(forKey: "lastUpdateCheck") as? Date }
+        set { d.set(newValue, forKey: "lastUpdateCheck") }
+    }
 }

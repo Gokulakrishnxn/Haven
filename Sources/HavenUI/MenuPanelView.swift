@@ -4,6 +4,9 @@ import HavenCore
 public final class MenuPanelModel: ObservableObject {
     @Published public var name = ""
     @Published public var items: [TaskItem] = []
+    /// For example "Update available: 0.2.0". Nil when up to date.
+    @Published public var updateLabel: String?
+    public var onUpdate: () -> Void = {}
 
     public var onNewTask: () -> Void = {}
     public var onAnnotate: () -> Void = {}
@@ -55,6 +58,20 @@ public struct MenuPanelView: View {
                 .padding(.horizontal, 8).padding(.bottom, 8)
             }
 
+            if let label = model.updateLabel {
+                Divider()
+                Button(action: model.onUpdate) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.down.circle.fill").foregroundStyle(.green)
+                        Text(label).font(.callout)
+                        Spacer()
+                        Text("View").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
             Divider()
             HStack(spacing: 4) {
                 FooterButton(title: "Tasks", icon: "list.bullet", action: model.onShowTasks)
