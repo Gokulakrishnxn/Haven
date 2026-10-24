@@ -63,7 +63,7 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Custom global shortcuts with a recorder in Settings | Implemented (record UI not yet tried by hand) |
 | MCP servers (command or web address) enabled in Settings are passed to Claude tasks | Implemented; Claude confirmed loading the config; no real server tried |
 | Mac control for agents with `haven-mac`: snapshot, click, type, key, scroll, list and open apps | Implemented; verified end to end (a real Claude task opened Calculator, read it and clicked a button) |
-| Browser extension for page-level control | Planned |
+| Chrome extension for page-level control (`haven-browser`: snapshot, extract text, click, type, select, scroll, tabs), paired with a code, per-site consent in Chrome, loopback-only bridge | Implemented; verified end to end in Brave (a real Claude task filled and submitted a form and was refused on a password field); not tried in Chrome itself |
 | Per-action approval policy (auto-allow classes) | Planned |
 | MCP and skills per task | Planned |
 
@@ -181,6 +181,21 @@ How it stays safe:
 - Every action is in the audit log; typed text is recorded as a character count only.
 - Snapshots send window contents to whichever model the agent uses, so use it on windows you are comfortable sharing.
 - Chromium-based apps (Chrome, Electron apps) expose their page elements only after Haven asks, so the first snapshot can be thin. No screenshots yet (that needs Screen Recording).
+
+### Browser control
+
+The Chrome extension in [`extension/`](extension/README.md) lets agents work on web pages with `haven-browser` (`snapshot`, `extract-text`, `click --ref bN`, `type --ref bN --text …`, `select`, `scroll`, `navigate`, `open-tab`, `list-tabs`, `back`, `refresh`).
+
+```
+agent ─ haven-browser ─▶ Haven app ─ WebSocket (127.0.0.1 only, pairing code) ─▶ extension ─▶ page
+```
+
+- **Pairing:** Settings > Browser shows a pairing code to paste into the extension's options. The code stays on your Mac and can be regenerated. The bridge listens on loopback only, accepts only the extension's origin, and a page cannot connect without the code.
+- **Per-site consent:** you connect each site from the extension popup, and Chrome shows its own permission prompt. Commands on other sites are refused, and tab titles of other sites stay private.
+- **Per-task permission:** reading a connected page needs no prompt (and is audited); the first command that changes a page asks once per task.
+- **Never passwords:** password fields are not readable and typing into them is refused; sign-ins go through `haven-vault`.
+- **Untrusted pages:** agents are told that page text is data, never instructions. This reduces, but cannot remove, prompt-injection risk.
+- **Limits:** top-level frames only, no screenshots (Chrome requires all-sites access for them), and Chrome 137+ cannot load the extension from the command line, so install it from `chrome://extensions`.
 
 ### Secure sign-in
 
