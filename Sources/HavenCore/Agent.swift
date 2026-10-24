@@ -10,7 +10,7 @@ public struct AgentModel: Identifiable, Hashable, Sendable {
 }
 
 /// Which agent runs a task. Launch details live in HavenRuntime adapters.
-public enum Agent: String, CaseIterable, Identifiable, Sendable {
+public enum Agent: String, CaseIterable, Identifiable, Codable, Sendable {
     // Raw values are stored in preferences, so they stay stable.
     case claudeCode = "Claude Code"
     case cursor = "Cursor"
