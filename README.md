@@ -38,7 +38,8 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Menu-bar app, no Dock icon | Implemented |
 | Global shortcuts: ⌥Space (ask), ⌥⇧Space (annotate) | Implemented |
 | Context capture: frontmost app and selected text | Implemented (selected text needs Accessibility) |
-| Composer: agent and model menus with icons, drag or pick files to attach, annotate button, ⌘↩ to start another task | Implemented |
+| Composer: two flat dark cards, a live status card ("Working…" with the agent's current activity) above a minimal composer with one agent · model menu, attach, Quick Actions, annotate, history, and a red stop button while a task runs; it stays open as a follow-up surface and Esc detaches it to the notch | Implemented |
+| Triple-click selected text in any app for a small menu: Chat, Explain, and your Quick Actions | Implemented (needs Accessibility; not yet tried in many apps) |
 | Agents: Claude, Cursor, Codex, Grok | Claude verified (including `--model` aliases); Cursor, Codex and Grok flags unverified |
 | Background tasks with live streamed output, cancel, rerun | Implemented |
 | Structured events from Claude Code (`stream-json`), process-group cancel and timeout | Implemented, with tests |
