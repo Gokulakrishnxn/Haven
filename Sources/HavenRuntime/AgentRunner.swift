@@ -18,6 +18,8 @@ public enum AgentRegistry {
     public static func adapter(for agent: Agent) -> AgentAdapter {
         switch agent {
         case .claudeCode: return ClaudeCodeAdapter()
+        // Cursor, Codex and Grok flags are unverified; they run as plain text without a model flag.
+        case .cursor: return PlainTextAdapter(agent: .cursor, executable: "cursor-agent", arguments: ["-p"])
         case .codex: return PlainTextAdapter(agent: .codex, executable: "codex", arguments: ["exec"])
         case .grok: return PlainTextAdapter(agent: .grok, executable: "grok", arguments: ["-p"])
         }
@@ -27,7 +29,7 @@ public enum AgentRegistry {
 public enum AgentRunner {
     /// Launches the adapter's CLI through a login shell (so the user's PATH applies).
     public static func launch(_ adapter: AgentAdapter, request: AgentRequest) -> AgentRun {
-        launch(command: ["/bin/zsh", "-lc", "exec \"$0\" \"$@\"", adapter.executable] + adapter.arguments + [request.prompt],
+        launch(command: ["/bin/zsh", "-lc", "exec \"$0\" \"$@\"", adapter.executable] + adapter.arguments(for: request) + [request.prompt],
                parser: adapter.makeParser(), request: request)
     }
 

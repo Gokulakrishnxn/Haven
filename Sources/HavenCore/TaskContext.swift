@@ -6,12 +6,15 @@ public struct TaskContext: Sendable {
     public var selectedText: String?
     /// Markdown brief built from Annotate-mode pins.
     public var brief: String?
+    /// Absolute paths of files the user attached.
+    public var files: [String]
 
-    public init(appName: String? = nil, selectedText: String? = nil, brief: String? = nil) {
+    public init(appName: String? = nil, selectedText: String? = nil, brief: String? = nil, files: [String] = []) {
         self.appName = appName
         self.selectedText = selectedText
         self.brief = brief
+        self.files = files
     }
 
-    public var isEmpty: Bool { appName == nil && selectedText == nil && brief == nil }
+    public var isEmpty: Bool { appName == nil && selectedText == nil && brief == nil && files.isEmpty }
 }

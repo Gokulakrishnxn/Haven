@@ -1,27 +1,39 @@
 import AppKit
+import SwiftUI
 import HavenCore
+import HavenUI
 
 /// Annotate mode (docs/design.md §13): dim the screen, hover to highlight, click or drag to
 /// place numbered pins, add a note per pin, then send everything as one brief.
 final class AnnotateController {
     private var windows: [OverlayWindow] = []
     private(set) var pins: [Pin] = []
-    private let onSend: (Agent, String, [Pin]) -> Void
+    private let onSend: (Agent, String?, String, [Pin]) -> Void
+    let bar = AnnotateBarModel()
 
-    init(onSend: @escaping (Agent, String, [Pin]) -> Void) { self.onSend = onSend }
+    init(onSend: @escaping (Agent, String?, String, [Pin]) -> Void) {
+        self.onSend = onSend
+        bar.onSend = { [weak self] agent, model, text in self?.send(agent: agent, model: model, instruction: text) }
+        bar.onUndo = { [weak self] in self?.removeLast() }
+        bar.onExit = { [weak self] in self?.end() }
+    }
 
     var isActive: Bool { !windows.isEmpty }
 
     func begin() {
         guard !isActive else { return }
         pins = []
+        bar.text = ""
+        bar.pins = []
+        bar.agent = Preferences.defaultAgent
+        bar.model = Preferences.defaultModel
         let primary = NSScreen.main ?? NSScreen.screens[0]
         windows = NSScreen.screens.map { screen in
             OverlayWindow(screen: screen, controller: self, hostsBar: screen == primary)
         }
         NSApp.activate(ignoringOtherApps: true)
         windows.forEach { $0.makeKeyAndOrderFront(nil) }
-        (windows.first { $0.hostsBar })?.focusInstruction()
+        bar.focusRequest += 1
     }
 
     func end() {
@@ -32,26 +44,38 @@ final class AnnotateController {
 
     func add(_ pin: Pin) {
         pins.append(pin)
+        syncBar()
         redraw()
     }
 
     func removeLast() {
         guard !pins.isEmpty else { return }
         pins.removeLast()
+        syncBar()
         redraw()
     }
 
     func setNote(_ note: String, forPin n: Int) {
         if let i = pins.firstIndex(where: { $0.n == n }) { pins[i].note = note }
+        syncBar()
         redraw()
+        bar.focusRequest += 1  // back to the instruction field
     }
 
-    func send(agent: Agent, instruction: String) {
+    private func syncBar() {
+        bar.pins = pins.map { pin in
+            let label = [pin.note, pin.title, pin.role, pin.app, pin.kind.rawValue]
+                .compactMap { $0 }.first { !$0.isEmpty } ?? pin.kind.rawValue
+            return PinSummary(id: pin.n, label: String(label.prefix(32)))
+        }
+    }
+
+    func send(agent: Agent, model: String?, instruction: String) {
         guard !pins.isEmpty || !instruction.isEmpty else { return }
         let text = instruction.isEmpty ? "Address the annotated items." : instruction
         let snapshot = pins
         end()
-        onSend(agent, text, snapshot)
+        onSend(agent, model, text, snapshot)
     }
 
     private func redraw() { windows.forEach { $0.contentView?.needsDisplay = true } }
@@ -59,8 +83,6 @@ final class AnnotateController {
 
 private final class OverlayWindow: NSWindow {
     let hostsBar: Bool
-    private let bar = NSTextField()
-    private let picker = NSPopUpButton()
 
     override var canBecomeKey: Bool { true }
 
@@ -81,45 +103,14 @@ private final class OverlayWindow: NSWindow {
     }
 
     private func buildBar(in view: NSView, controller: AnnotateController) {
-        let blur = Theme.vibrancy(radius: 16)
-        blur.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(blur)
-
-        bar.placeholderString = "Tell Haven what to do with these…"
-        bar.font = .systemFont(ofSize: 15)
-        bar.isBordered = false
-        bar.drawsBackground = false
-        bar.focusRingType = .none
-        bar.delegate = view as? NSTextFieldDelegate
-        (view as? AnnotateView)?.instructionField = bar
-        (view as? AnnotateView)?.agentPicker = picker
-
-        picker.addItems(withTitles: Agent.allCases.map(\.rawValue))
-        picker.selectItem(withTitle: Preferences.defaultAgent.rawValue)
-        picker.controlSize = .small
-        let hint = Theme.label("Click or drag to pin · ↩ Send · ⌫ Undo · ⎋ Exit", font: Theme.captionFont, color: .secondaryLabelColor)
-
-        let bottom = NSStackView(views: [picker, NSView(), hint])
-        let stack = NSStackView(views: [bar, bottom])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        blur.addSubview(stack)
+        let host = NSHostingView(rootView: AnnotateBarView(model: controller.bar))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(host)
         NSLayoutConstraint.activate([
-            blur.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            blur.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -48),
-            blur.widthAnchor.constraint(equalToConstant: 620),
-            stack.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -16),
-            stack.topAnchor.constraint(equalTo: blur.topAnchor, constant: 12),
-            stack.bottomAnchor.constraint(equalTo: blur.bottomAnchor, constant: -10),
-            bar.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            bottom.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            host.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            host.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -48),
         ])
     }
-
-    func focusInstruction() { makeFirstResponder(bar) }
 }
 
 /// Flipped view (top-left origin) so view coordinates map to global screen coordinates by a constant offset.
@@ -129,8 +120,6 @@ private final class AnnotateView: NSView, NSTextFieldDelegate {
 
     let screen: NSScreen
     unowned let controller: AnnotateController
-    var instructionField: NSTextField?
-    var agentPicker: NSPopUpButton?
 
     private var hover: CGRect?
     private var dragStart: CGPoint?
@@ -254,24 +243,20 @@ private final class AnnotateView: NSView, NSTextFieldDelegate {
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        let isNote = control === noteField
+        guard control === noteField else { return false }
         switch selector {
         case #selector(NSResponder.insertNewline(_:)):
-            if isNote { finishNote(commit: true) } else { sendBrief() }
+            finishNote(commit: true)
             return true
         case #selector(NSResponder.cancelOperation(_:)):
-            if isNote { finishNote(commit: false) } else { controller.end() }
+            finishNote(commit: false)
             return true
         default:
             return false
         }
     }
 
-    private func sendBrief() {
-        let text = instructionField?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let agent = Agent.allCases[agentPicker?.indexOfSelectedItem ?? 0]
-        controller.send(agent: agent, instruction: text)
-    }
+    private func sendBrief() { controller.bar.send() }
 
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {

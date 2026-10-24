@@ -62,6 +62,12 @@ public struct ClaudeCodeAdapter: AgentAdapter {
     public init() {}
     public let agent = Agent.claudeCode
     public let executable = "claude"
-    public let arguments = ["-p", "--output-format", "stream-json", "--verbose"]
+
+    public func arguments(for request: AgentRequest) -> [String] {
+        var args = ["-p", "--output-format", "stream-json", "--verbose"]
+        if let model = request.model { args += ["--model", model] }
+        return args
+    }
+
     public func makeParser() -> OutputParser { ClaudeStreamParser() }
 }

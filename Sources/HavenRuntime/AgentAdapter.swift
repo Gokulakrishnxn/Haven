@@ -12,8 +12,8 @@ public protocol OutputParser {
 public protocol AgentAdapter: Sendable {
     var agent: Agent { get }
     var executable: String { get }
-    /// Arguments placed before the prompt.
-    var arguments: [String] { get }
+    /// Arguments placed before the prompt, including the model when one is chosen.
+    func arguments(for request: AgentRequest) -> [String]
     func makeParser() -> OutputParser
 }
 
@@ -43,10 +43,18 @@ struct PlainTextParser: OutputParser {
 public struct PlainTextAdapter: AgentAdapter {
     public let agent: Agent
     public let executable: String
-    public let arguments: [String]
+    public let baseArguments: [String]
+    /// Flag that selects a model, or nil if the CLI's flag has not been verified.
+    public let modelFlag: String?
 
-    public init(agent: Agent, executable: String, arguments: [String]) {
-        self.agent = agent; self.executable = executable; self.arguments = arguments
+    public init(agent: Agent, executable: String, arguments: [String], modelFlag: String? = nil) {
+        self.agent = agent; self.executable = executable; self.baseArguments = arguments; self.modelFlag = modelFlag
+    }
+
+    public func arguments(for request: AgentRequest) -> [String] {
+        var args = baseArguments
+        if let flag = modelFlag, let model = request.model { args += [flag, model] }
+        return args
     }
 
     public func makeParser() -> OutputParser { PlainTextParser() }
