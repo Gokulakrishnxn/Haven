@@ -9,7 +9,7 @@ import HavenUI
 final class ApprovalPresenter {
     private let model = ApprovalModel()
     private let panel: NSPanel
-    private var queue: [(agent: Agent, task: String, summary: String, reason: String, done: (Bool) -> Void)] = []
+    private var queue: [(agent: Agent, task: String, summary: String, reason: String, allowLabel: String, done: (Bool) -> Void)] = []
     private var showing = false
     private var timeout: DispatchWorkItem?
 
@@ -32,9 +32,9 @@ final class ApprovalPresenter {
         model.onDeny = { [weak self] in self?.answer(false) }
     }
 
-    func ask(agent: Agent, task: String, summary: String, reason: String) async -> Bool {
+    func ask(agent: Agent, task: String, summary: String, reason: String, allowLabel: String = "Allow once") async -> Bool {
         await withCheckedContinuation { continuation in
-            queue.append((agent, task, summary, reason, { continuation.resume(returning: $0) }))
+            queue.append((agent, task, summary, reason, allowLabel, { continuation.resume(returning: $0) }))
             presentNext()
         }
     }
@@ -46,6 +46,7 @@ final class ApprovalPresenter {
         model.taskTitle = next.task
         model.summary = next.summary
         model.reason = next.reason
+        model.allowLabel = next.allowLabel
 
         panel.contentViewController?.view.layoutSubtreeIfNeeded()
         panel.setContentSize(panel.contentViewController?.view.fittingSize ?? panel.frame.size)

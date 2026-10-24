@@ -7,6 +7,10 @@ final class VaultController {
     let vault = CredentialVault.standard()
     let audit = AuditLog.appSupport()
     private let store: TaskStore
+    @MainActor private lazy var mac = MacController()
+    /// Tasks the person has allowed to control apps.
+    private var macGrants = Set<String>()
+    private let macLock = NSLock()
     /// Created lazily on the main actor, where its panel lives.
     @MainActor private lazy var approvals = ApprovalPresenter()
     private var server: VaultServer?
@@ -41,6 +45,8 @@ final class VaultController {
         }
         let title = found.title
 
+        if request.action == "mac" { return await handleMac(request, taskTitle: title, agent: found.agent) }
+
         if request.action == "approve" {
             let allowed = await MainActor.run { approvals }.ask(agent: found.agent, task: title, summary: request.summary, reason: request.reason)
             audit.append(credential: "(approval)", site: "-", task: title, reason: "\(request.summary) — \(request.reason)",
@@ -50,6 +56,50 @@ final class VaultController {
         let result = await service.handle(FillRequest(site: request.site, field: request.field, reason: request.reason,
                                                       taskID: request.task, taskTitle: title))
         return WireResponse(ok: result.ok, message: result.message)
+    }
+
+    /// Mac control: reading is open to running tasks; anything that changes the screen needs a yes, once per task.
+    private func handleMac(_ request: WireRequest, taskTitle: String, agent: Agent) async -> WireResponse {
+        func log(_ outcome: AuditOutcome, _ detail: String) {
+            audit.append(credential: "(mac control)", site: request.command, task: taskTitle,
+                         reason: Self.describe(request), outcome: outcome, detail: detail)
+        }
+        guard let command = MacCommand(rawValue: request.command) else {
+            log(.refused, "Unknown command")
+            return WireResponse(ok: false, message: "Unknown command \(request.command).")
+        }
+        if command.mutates {
+            let granted = macLock.withLock { macGrants.contains(request.task) }
+            if !granted {
+                let allowed = await MainActor.run { approvals }.ask(
+                    agent: agent, task: taskTitle, summary: "see and control apps on your Mac",
+                    reason: "It wants to \(command.rawValue) as part of this task. Passwords and password managers stay off limits.",
+                    allowLabel: "Allow for this task")
+                guard allowed else {
+                    log(.denied, "Mac control not allowed")
+                    return WireResponse(ok: false, message: "Denied. Do not control apps for this task.")
+                }
+                macLock.withLock { _ = macGrants.insert(request.task) }
+            }
+        }
+        do {
+            let text = try await MainActor.run { mac }.run(command, args: request.args)
+            if command.mutates || command == .snapshot { log(.approved, command == .snapshot ? "Read a window outline" : "Done") }
+            return WireResponse(ok: true, message: text)
+        } catch let failure as MacController.Failure {
+            log(.failed, failure.message)
+            return WireResponse(ok: false, message: failure.message)
+        } catch {
+            log(.failed, "\(error)")
+            return WireResponse(ok: false, message: "\(error)")
+        }
+    }
+
+    /// What goes in the audit log. Typed text is never recorded, only its length.
+    private static func describe(_ r: WireRequest) -> String {
+        var args = r.args
+        if let text = args.removeValue(forKey: "text") { args["text"] = "\(text.count) characters" }
+        return args.isEmpty ? r.command : r.command + " " + args.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
     }
 
     /// URL of the active tab, if a supported browser is frontmost.
@@ -64,6 +114,14 @@ final class VaultController {
         Before any action that is hard to undo (sending a message, deleting, purchasing, submitting a form), ask the person \
         first by running `haven-vault approve --action "<what you are about to do>" --reason "<why>"`. \
         Continue only if it exits successfully and prints Approved.
+        """
+        note += """
+
+
+        You can see and control Mac apps with `haven-mac`: `snapshot [--app NAME]` prints an outline of the window with [eN] references; \
+        `click --ref eN` (or `--x N --y N`), `type --text "..." [--ref eN]`, `key --combo cmd+s`, `scroll --dy N`, \
+        `list-apps`, `open-app --name NAME`. Take a fresh snapshot before using references. The person is asked once per task \
+        before you change anything. Password fields, password managers and System Settings are off limits; use haven-vault for logins.
         """
         if hasLogins {
             note += """

@@ -28,7 +28,7 @@ struct SystemFieldFiller: FieldFiller {
                 return "The focused field is not a text field for a username."
             }
         }
-        await MainActor.run { Self.type(value) }
+        await MainActor.run { KeyTyper.type(value) }
         return nil
     }
 
@@ -36,19 +36,5 @@ struct SystemFieldFiller: FieldFiller {
         var v: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, attr as CFString, &v) == .success else { return nil }
         return v as? String
-    }
-
-    @MainActor private static func type(_ text: String) {
-        let units = Array(text.utf16)
-        var i = 0
-        while i < units.count {
-            let chunk = Array(units[i..<min(i + 16, units.count)])
-            for down in [true, false] {
-                let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
-                event?.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: chunk)
-                event?.post(tap: .cghidEventTap)
-            }
-            i += 16
-        }
     }
 }

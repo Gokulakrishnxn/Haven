@@ -6,6 +6,7 @@ public final class ApprovalModel: ObservableObject {
     @Published public var taskTitle = ""
     @Published public var summary = ""
     @Published public var reason = ""
+    @Published public var allowLabel = "Allow once"
 
     public var onAllow: () -> Void = {}
     public var onDeny: () -> Void = {}
@@ -36,7 +37,7 @@ public struct ApprovalView: View {
                 Button(action: model.onDeny) { Text("Deny").frame(maxWidth: .infinity) }
                     .buttonStyle(ApprovalButtonStyle(fill: Color.white.opacity(0.12)))
                     .keyboardShortcut(.cancelAction)
-                Button(action: model.onAllow) { Text("Allow once").frame(maxWidth: .infinity) }
+                Button(action: model.onAllow) { Text(model.allowLabel).frame(maxWidth: .infinity) }
                     .buttonStyle(ApprovalButtonStyle(fill: .white, foreground: .black))
             }
         }
