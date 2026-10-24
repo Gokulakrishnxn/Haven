@@ -7,7 +7,6 @@ public enum BrowserCommand: String, Sendable {
     case listTabs = "list-tabs"
     case snapshot
     case extractText = "extract-text"
-    case screenshot
     case openTab = "open-tab", activateTab = "activate-tab", closeTab = "close-tab"
     case navigate, back, forward, refresh
     case click, type, select, scroll
@@ -16,7 +15,7 @@ public enum BrowserCommand: String, Sendable {
     /// Commands that change the page or the browser. These need the person's permission for the task.
     public var mutates: Bool {
         switch self {
-        case .status, .listTabs, .snapshot, .extractText, .screenshot, .wait: return false
+        case .status, .listTabs, .snapshot, .extractText, .wait: return false
         default: return true
         }
     }
@@ -109,10 +108,11 @@ public final class BrowserBridge: @unchecked Sendable {
             return NWProtocolWebSocket.Response(status: .accept, subprotocol: nil)
         }
         let params = NWParameters.tcp
-        params.requiredInterfaceType = .loopback
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
         guard let nwPort = NWEndpoint.Port(rawValue: port) else { throw BridgeError("Bad port") }
-        let listener = try NWListener(using: params, on: nwPort)
+        // Bind to 127.0.0.1 only. Restricting the interface type alone still listens on every address.
+        params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: nwPort)
+        let listener = try NWListener(using: params)
         listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
         listener.start(queue: queue)
         self.listener = listener

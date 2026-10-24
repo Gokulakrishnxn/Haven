@@ -135,7 +135,7 @@ private func waitUntil(_ timeout: TimeInterval = 3, _ condition: () -> Bool) asy
         _ = try await ext.receive()
         ext.serve { _ in ["ok": true, "message": "Screenshot taken.", "image": Data([1, 2, 3]).base64EncodedString()] }
         #expect(await waitUntil { bridge.isConnected })
-        let result = await bridge.send("screenshot", args: [:])
+        let result = await bridge.send("snapshot", args: [:])
         #expect(result.image == Data([1, 2, 3]))
     }
 }
@@ -161,9 +161,46 @@ private func waitUntil(_ timeout: TimeInterval = 3, _ condition: () -> Bool) asy
 
 @Suite struct BrowserCommandTests {
     @Test func readingDoesNotNeedPermissionButChangesDo() {
-        for c in [BrowserCommand.status, .listTabs, .snapshot, .extractText, .screenshot, .wait] { #expect(!c.mutates, "\(c)") }
+        for c in [BrowserCommand.status, .listTabs, .snapshot, .extractText, .wait] { #expect(!c.mutates, "\(c)") }
         for c in [BrowserCommand.openTab, .activateTab, .closeTab, .navigate, .back, .forward, .refresh, .click, .type, .select, .scroll] {
             #expect(c.mutates, "\(c)")
         }
+    }
+}
+
+@Suite struct BridgeExposureTests {
+    /// First non-loopback IPv4 address of this machine, if it has one.
+    private func lanAddress() -> String? {
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0, let first = list else { return nil }
+        defer { freeifaddrs(list) }
+        for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let a = ptr.pointee
+            guard let sa = a.ifa_addr, sa.pointee.sa_family == sa_family_t(AF_INET), (a.ifa_flags & UInt32(IFF_LOOPBACK)) == 0,
+                  (a.ifa_flags & UInt32(IFF_UP)) != 0 else { continue }
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            getnameinfo(sa, socklen_t(sa.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
+            return String(cString: host)
+        }
+        return nil
+    }
+
+    @Test func bridgeIsNotReachableFromOtherAddresses() throws {
+        guard let ip = lanAddress() else { return }  // no network interface to test against
+        let port = freePort()
+        let bridge = BrowserBridge(token: "t", port: port, allowedOrigin: nil)
+        try bridge.start(); defer { bridge.stop() }
+        Thread.sleep(forTimeInterval: 0.3)
+
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = port.bigEndian
+        inet_pton(AF_INET, ip, &addr.sin_addr)
+        let result = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        #expect(result != 0, "the bridge accepted a connection on \(ip)")
     }
 }
