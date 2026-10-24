@@ -6,7 +6,11 @@ import HavenUI
 /// Borderless floating panel hosting the SwiftUI composer.
 final class ComposerPanel: NSPanel {
     private let model = ComposerModel()
-    private var onSubmit: ((ComposerSubmission) -> Void)?
+    /// Starts the task and returns its id so the status card can follow it.
+    private var onSubmit: ((ComposerSubmission) -> UUID?)?
+    private var trackedTask: UUID?
+    var onStop: ((UUID) -> Void)?
+    var onOpenTasks: (() -> Void)?
     /// Called when the user taps the annotate button.
     var onAnnotate: (() -> Void)?
 
@@ -35,7 +39,7 @@ final class ComposerPanel: NSPanel {
         model.onSubmit = { [weak self] submission, keepOpen in
             Preferences.defaultAgent = submission.agent
             Preferences.defaultModel = submission.model
-            self?.onSubmit?(submission)
+            if let id = self?.onSubmit?(submission) { self?.trackedTask = id }
             if !keepOpen { self?.orderOut(nil) }
         }
         model.onAnnotate = { [weak self] in
@@ -43,6 +47,8 @@ final class ComposerPanel: NSPanel {
             self?.onAnnotate?()
         }
         model.onAttach = { [weak self] in self?.chooseFiles() }
+        model.onStop = { [weak self] id in self?.onStop?(id) }
+        model.onOpenTasks = { [weak self] in self?.onOpenTasks?() }
         model.onSaveAction = { [weak self] text, agent, modelID in
             guard let self else { return }
             self.quickActions.saveWithPrompt(prompt: text, agent: agent, model: modelID,
@@ -52,10 +58,12 @@ final class ComposerPanel: NSPanel {
         }
     }
 
-    func present(context: TaskContext, onSubmit: @escaping (ComposerSubmission) -> Void) {
+    func present(context: TaskContext, onSubmit: @escaping (ComposerSubmission) -> UUID?) {
         self.onSubmit = onSubmit
         model.text = ""
         model.files = []
+        trackedTask = nil
+        model.activeTask = nil
         model.quickActions = quickActions.actions
         model.agent = Preferences.defaultAgent
         model.model = Preferences.defaultModel
@@ -69,6 +77,18 @@ final class ComposerPanel: NSPanel {
         }
         NSApp.activate(ignoringOtherApps: true)
         makeKeyAndOrderFront(nil)
+    }
+
+    /// Development aid: submits through the real composer path.
+    func debugSubmit(_ text: String) {
+        model.text = text
+        model.submit(keepOpen: true)
+    }
+
+    /// Keeps the status card in step with the task started from this panel.
+    func sync(items: [TaskItem]) {
+        guard let id = trackedTask else { return }
+        model.activeTask = items.first { $0.id == id }
     }
 
     private func chooseFiles() {
