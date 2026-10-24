@@ -15,8 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onAsk: { [weak self] in self?.showComposer() },
         onAnnotate: { [weak self] in self?.toggleAnnotate() },
         onShowTasks: { [weak self] in self?.showTasks() })
-    private lazy var annotate = AnnotateController { [weak self] agent, text, pins in
-        self?.startAnnotated(agent: agent, instruction: text, pins: pins)
+    private lazy var annotate = AnnotateController { [weak self] agent, model, text, pins in
+        self?.startAnnotated(agent: agent, model: model, instruction: text, pins: pins)
     }
     private lazy var onboarding: OnboardingWindow = {
         let w = OnboardingWindow()
@@ -90,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "onboarding": onboarding.show()
         case "settings": settings.show()
         case "panel": statusItemClicked()
+        case "annotate": toggleAnnotate()
         default: break
         }
     }
@@ -113,12 +114,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         annotate.begin()
     }
 
-    private func startAnnotated(agent: Agent, instruction: String, pins: [Pin]) {
+    private func startAnnotated(agent: Agent, model: String?, instruction: String, pins: [Pin]) {
         var context = TaskContext()
         context.appName = pins.first?.app ?? annotateAppName
         context.brief = BriefBuilder.markdown(pins: pins)
-        store.start(agent: agent, model: Preferences.defaultAgent == agent ? Preferences.defaultModel : nil,
-                    instruction: instruction, context: context)
+        Preferences.defaultAgent = agent
+        Preferences.defaultModel = model
+        store.start(agent: agent, model: model, instruction: instruction, context: context)
     }
 
     @objc private func showTasks() { outputWindow.show() }
