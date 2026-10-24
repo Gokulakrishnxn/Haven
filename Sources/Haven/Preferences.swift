@@ -1,5 +1,6 @@
 import Foundation
 import HavenCore
+import HavenUI
 
 enum Preferences {
     private static let d = UserDefaults.standard
@@ -43,5 +44,23 @@ enum Preferences {
     static var defaultModel: String? {
         get { d.string(forKey: "defaultModel") }
         set { d.set(newValue, forKey: "defaultModel") }
+    }
+
+    static var composeShortcut: Shortcut {
+        get { shortcut("composeShortcut") ?? .composeDefault }
+        set { setShortcut(newValue, "composeShortcut") }
+    }
+
+    static var annotateShortcut: Shortcut {
+        get { shortcut("annotateShortcut") ?? .annotateDefault }
+        set { setShortcut(newValue, "annotateShortcut") }
+    }
+
+    private static func shortcut(_ key: String) -> Shortcut? {
+        d.data(forKey: key).flatMap { try? JSONDecoder().decode(Shortcut.self, from: $0) }
+    }
+
+    private static func setShortcut(_ value: Shortcut, _ key: String) {
+        d.set(try? JSONEncoder().encode(value), forKey: key)
     }
 }

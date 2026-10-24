@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = TaskStore()
     private let quickActions = QuickActionStore()
     private lazy var vaultController = VaultController(store: store)
+    private let mcpStore = MCPStore()
     private lazy var panel = ComposerPanel(quickActions: quickActions)
     private var statusItem: NSStatusItem!
     private var composeKey: HotKey?
@@ -25,11 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return w
     }()
     private lazy var settings: SettingsWindow = {
-        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController)
+        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController, mcp: mcpStore)
         w.onChange = { [weak self] in
             guard let self else { return }
             self.notch.update(items: self.store.tasks.map(\.item))
             self.menuModel.name = Preferences.displayName
+            self.registerHotKeys()
         }
         return w
     }()
@@ -62,12 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if self.outputWindow.window?.isVisible == true { self.outputWindow.reload() }
         }
 
-        composeKey = HotKey(id: 1, keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey)) { [weak self] in
-            self?.showComposer()
-        }
-        annotateKey = HotKey(id: 2, keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey | shiftKey)) { [weak self] in
-            self?.toggleAnnotate()
-        }
+        registerHotKeys()
 
         panel.onAnnotate = { [weak self] in self?.toggleAnnotate() }
         panel.onStop = { [weak self] id in
@@ -85,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         selectionPopup.start()
         store.loginNote = { [weak self] in VaultController.agentNote(hasLogins: self?.vaultController.hasLogins ?? false) }
+        store.mcpConfigPath = { [weak self] id in self?.mcpStore.configPath(for: id) }
         store.helperDirectory = Bundle.main.executableURL?.deletingLastPathComponent().path
         vaultController.start()
         notch.update(items: [])
@@ -134,6 +132,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "annotate": toggleAnnotate()
         case "selection": selectionPopup.debugShow()
         default: break
+        }
+    }
+
+    /// (Re)registers the global shortcuts from preferences. Replacing an instance unregisters the old key.
+    private func registerHotKeys() {
+        let c = Preferences.composeShortcut, a = Preferences.annotateShortcut
+        composeKey = nil
+        annotateKey = nil
+        composeKey = HotKey(id: 1, keyCode: c.keyCode, modifiers: c.modifiers) { [weak self] in self?.showComposer() }
+        if a != c {
+            annotateKey = HotKey(id: 2, keyCode: a.keyCode, modifiers: a.modifiers) { [weak self] in self?.toggleAnnotate() }
         }
     }
 

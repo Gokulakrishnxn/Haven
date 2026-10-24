@@ -3,7 +3,7 @@ import HavenCore
 
 public enum SettingsSection: String, CaseIterable, Identifiable {
     case profile = "Profile", general = "General", agents = "Agents", quickActions = "Quick Actions"
-    case logins = "Logins", audit = "Audit Log"
+    case logins = "Logins", audit = "Audit Log", tools = "Tools"
     case shortcuts = "Shortcuts", privacy = "Privacy", about = "About"
 
     public var id: String { rawValue }
@@ -15,6 +15,7 @@ public enum SettingsSection: String, CaseIterable, Identifiable {
         case .agents: return "sparkles"
         case .quickActions: return "bolt"
         case .logins: return "key"
+        case .tools: return "puzzlepiece.extension"
         case .audit: return "list.bullet.rectangle"
         case .shortcuts: return "command"
         case .privacy: return "hand.raised"
@@ -61,12 +62,15 @@ public final class SettingsModel: ObservableObject {
     @Published public var agent: Agent { didSet { onChange() } }
     @Published public var showPill: Bool { didSet { onChange() } }
     @Published public var workingFolder: String { didSet { onChange() } }
+    @Published public var composeShortcut: Shortcut { didSet { onChange() } }
+    @Published public var annotateShortcut: Shortcut { didSet { onChange() } }
     /// nil while detection is running.
     @Published public var agentStatus: [Agent: AgentStatus]?
     @Published public var accessibilityGranted = false
     @Published public var screenRecordingGranted = false
     @Published public var taskCount = 0
     @Published public var quickActions: [QuickAction] = []
+    @Published public var mcpServers: [MCPServerConfig] = []
     @Published public var credentials: [CredentialRow] = []
     @Published public var auditRows: [AuditRow] = []
     /// False if the audit log's hash chain no longer verifies.
@@ -86,8 +90,14 @@ public final class SettingsModel: ObservableObject {
     public var onAddCredential: (_ label: String, _ site: String, _ username: String, _ password: String) -> Void = { _, _, _, _ in }
     public var onDeleteCredential: (UUID) -> Void = { _ in }
     public var onRefreshAudit: () -> Void = {}
+    public var onAddMCP: (_ name: String, _ kind: MCPServerConfig.Kind, _ commandLine: String, _ url: String) -> Void = { _, _, _, _ in }
+    public var onSetMCPEnabled: (UUID, Bool) -> Void = { _, _ in }
+    public var onDeleteMCP: (UUID) -> Void = { _ in }
 
-    public init(displayName: String, email: String, agent: Agent, showPill: Bool, workingFolder: String) {
+    public init(displayName: String, email: String, agent: Agent, showPill: Bool, workingFolder: String,
+                composeShortcut: Shortcut = .composeDefault, annotateShortcut: Shortcut = .annotateDefault) {
+        self.composeShortcut = composeShortcut
+        self.annotateShortcut = annotateShortcut
         self.displayName = displayName
         self.email = email
         self.agent = agent
@@ -117,9 +127,10 @@ public struct SettingsView: View {
                 case .general: GeneralPane(model: model)
                 case .agents: AgentsPane(model: model)
                 case .quickActions: QuickActionsPane(model: model)
+                case .tools: ToolsPane(model: model)
                 case .logins: LoginsPane(model: model)
                 case .audit: AuditPane(model: model)
-                case .shortcuts: ShortcutsPane()
+                case .shortcuts: ShortcutsPane(model: model)
                 case .privacy: PrivacyPane(model: model)
                 case .about: AboutPane(model: model)
                 }
@@ -235,22 +246,32 @@ struct AgentsPane: View {
 }
 
 struct ShortcutsPane: View {
+    @ObservedObject var model: SettingsModel
+
     var body: some View {
         Form {
             Section("Global") {
-                LabeledContent("New task") { KeyHint("⌥Space", "") }
-                LabeledContent("Annotate") { KeyHint("⌥⇧Space", "") }
+                LabeledContent("New task") { ShortcutRecorder(shortcut: $model.composeShortcut).frame(width: 130, height: 24) }
+                LabeledContent("Annotate") { ShortcutRecorder(shortcut: $model.annotateShortcut).frame(width: 130, height: 24) }
+                if model.composeShortcut == model.annotateShortcut {
+                    Label("Both actions use the same shortcut. Pick different ones.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                Button("Reset to Defaults") {
+                    model.composeShortcut = .composeDefault
+                    model.annotateShortcut = .annotateDefault
+                }
             }
             Section("Composer") {
-                LabeledContent("Run") { KeyHint("↩", "") }
-                LabeledContent("Run another") { KeyHint("⌘↩", "") }
-                LabeledContent("Close") { KeyHint("⎋", "") }
+                LabeledContent("Send") { KeyHint("↩", "") }
+                LabeledContent("Stop the running task") { KeyHint("⌘.", "") }
+                LabeledContent("Detach to the notch") { KeyHint("esc", "") }
             }
             Section("Task Center") {
                 LabeledContent("Cancel task") { KeyHint("⌘.", "") }
                 LabeledContent("Run again") { KeyHint("⌘R", "") }
             }
-            Section { Text("Shortcuts are fixed for now. Custom shortcuts are planned.").font(.callout).foregroundStyle(.secondary) }
+            Section { Text("Click a shortcut, then press the keys you want. It needs at least one modifier key.").font(.callout).foregroundStyle(.secondary) }
         }
     }
 }
@@ -502,5 +523,66 @@ struct AuditPane: View {
     }
     private func color(_ outcome: String) -> Color {
         switch outcome { case "approved": return .green; case "denied": return .orange; default: return .red }
+    }
+}
+
+// MARK: Tools (MCP)
+
+final class NewMCPDraft: ObservableObject {
+    @Published var name = ""
+    @Published var kind: MCPServerConfig.Kind = .command
+    @Published var commandLine = ""
+    @Published var url = ""
+
+    var isValid: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && (kind == .command ? !commandLine.trimmingCharacters(in: .whitespaces).isEmpty : url.lowercased().hasPrefix("http"))
+    }
+    func clear() { name = ""; commandLine = ""; url = "" }
+}
+
+struct ToolsPane: View {
+    @ObservedObject var model: SettingsModel
+    @StateObject private var draft = NewMCPDraft()
+
+    var body: some View {
+        Form {
+            Section("Connected MCP servers") {
+                if model.mcpServers.isEmpty { Text("No servers yet.").foregroundStyle(.secondary) }
+                ForEach(model.mcpServers) { server in
+                    HStack(spacing: 10) {
+                        Toggle("", isOn: Binding(get: { server.enabled }, set: { model.onSetMCPEnabled(server.id, $0) })).labelsHidden()
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(server.name)
+                            Text(server.kind == .command ? ([server.command] + server.args).joined(separator: " ") : server.url)
+                                .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button(role: .destructive) { model.onDeleteMCP(server.id) } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                    }
+                }
+            }
+            Section("Add a server") {
+                TextField("Name", text: $draft.name, prompt: Text("filesystem"))
+                Picker("Type", selection: $draft.kind) {
+                    Text("Command").tag(MCPServerConfig.Kind.command)
+                    Text("Web address").tag(MCPServerConfig.Kind.url)
+                }
+                .pickerStyle(.segmented)
+                if draft.kind == .command {
+                    TextField("Command", text: $draft.commandLine, prompt: Text("npx -y @modelcontextprotocol/server-filesystem ~/Documents"))
+                } else {
+                    TextField("Address", text: $draft.url, prompt: Text("https://example.com/mcp"))
+                }
+                Button("Add Server") {
+                    model.onAddMCP(draft.name, draft.kind, draft.commandLine, draft.url)
+                    draft.clear()
+                }
+                .disabled(!draft.isValid)
+                Text("Enabled servers are given to Claude tasks. Other agents don't use them yet.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }

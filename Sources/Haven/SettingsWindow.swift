@@ -9,14 +9,17 @@ final class SettingsWindow: NSWindowController {
     private let store: TaskStore
     private let quickActions: QuickActionStore
     private let vault: VaultController
+    private let mcp: MCPStore
     private let model = SettingsModel(displayName: Preferences.displayName, email: Preferences.email,
                                       agent: Preferences.defaultAgent, showPill: Preferences.showStatusPill,
-                                      workingFolder: Preferences.workingFolder)
+                                      workingFolder: Preferences.workingFolder,
+                                      composeShortcut: Preferences.composeShortcut, annotateShortcut: Preferences.annotateShortcut)
     private var poll: Timer?
     private var loading = false
     var onChange: (() -> Void)?
 
-    init(store: TaskStore, quickActions: QuickActionStore, vault: VaultController) {
+    init(store: TaskStore, quickActions: QuickActionStore, vault: VaultController, mcp: MCPStore) {
+        self.mcp = mcp
         self.store = store
         self.quickActions = quickActions
         self.vault = vault
@@ -61,6 +64,27 @@ final class SettingsWindow: NSWindowController {
         model.onDeleteCredential = { [weak self] id in
             self?.vault.vault.remove(id)
             self?.reloadVault()
+        }
+        model.mcpServers = mcp.servers
+        model.onAddMCP = { [weak self] name, kind, commandLine, url in
+            guard let self else { return }
+            let server: MCPServerConfig
+            if kind == .command {
+                let parsed = MCPServerConfig.parse(commandLine: commandLine)
+                server = MCPServerConfig(name: name, kind: .command, command: parsed.command, args: parsed.args)
+            } else {
+                server = MCPServerConfig(name: name, kind: .url, url: url)
+            }
+            self.mcp.add(server)
+            self.model.mcpServers = self.mcp.servers
+        }
+        model.onSetMCPEnabled = { [weak self] id, enabled in
+            self?.mcp.setEnabled(id, enabled)
+            self?.model.mcpServers = self?.mcp.servers ?? []
+        }
+        model.onDeleteMCP = { [weak self] id in
+            self?.mcp.delete(id)
+            self?.model.mcpServers = self?.mcp.servers ?? []
         }
         model.onRefreshAudit = { [weak self] in self?.reloadVault() }
         model.onClearHistory = { [weak self] in self?.store.clearFinished() }
@@ -119,6 +143,8 @@ final class SettingsWindow: NSWindowController {
         Preferences.defaultAgent = model.agent
         Preferences.showStatusPill = model.showPill
         Preferences.workingFolder = model.workingFolder
+        Preferences.composeShortcut = model.composeShortcut
+        Preferences.annotateShortcut = model.annotateShortcut
         onChange?()
     }
 }
