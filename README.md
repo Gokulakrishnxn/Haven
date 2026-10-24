@@ -41,8 +41,9 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Agent picker: Claude Code, Codex, Grok | Implemented (Codex and Grok flags unverified) |
 | Background task execution, one process per task | Implemented |
 | Task status in the menu bar | Implemented |
-| Task output viewer | Planned |
-| Notch / floating status pill | Planned |
+| Task output viewer (list and detail window) | Implemented |
+| Floating status pill (running count, last result) | Implemented |
+| Notch-integrated status UI | Planned |
 | Browser annotation (Agentation-style) | Planned |
 | Keychain secure fill with Touch ID | Planned |
 | MCP and skills per task | Planned |
@@ -73,9 +74,10 @@ This repository is an early scaffold. Items below are marked by what exists toda
 │  │                           │ agent + instruction + context     │   │
 │  │                           ▼                                   │   │
 │  │                   ┌────────────────┐                          │   │
-│  │                   │   TaskStore    │ observes status          │   │
-│  │                   │ (HavenTask[])  │──────────▶ status menu   │   │
-│  │                   └───────┬────────┘                          │   │
+│  │                   │   TaskStore    │ onChange                 │   │
+│  │                   │ (HavenTask[])  │──┬──▶ status menu        │   │
+│  │                   └───────┬────────┘  ├──▶ StatusPill         │   │
+│  │                           │           └──▶ OutputWindow       │   │
 │  └───────────────────────────┼───────────────────────────────────┘   │
 │                              │ spawn (one Process per task)          │
 │                              ▼                                       │
@@ -105,7 +107,9 @@ All sources live in `Sources/Haven/`.
 | Global shortcut | `HotKey.swift` | Registers ⌥Space through Carbon `RegisterEventHotKey`; needs no extra permission |
 | Context capture | `ContextCapture.swift` | Reads the frontmost app, and the focused element's selected text via the Accessibility API when trusted |
 | Composer | `ComposerPanel.swift` | Borderless floating `NSPanel` with context chip, agent picker and input; Return submits, Esc closes |
-| Task engine | `TaskStore.swift` | `Agent` command mapping, `HavenTask` model and state, and background process execution |
+| Task engine | `TaskStore.swift` | `Agent` command mapping, `HavenTask` model and state, background process execution, and an `onChange` callback for UI updates |
+| Status pill | `StatusPill.swift` | Non-activating floating pill at top-center showing running count or last result; click opens the output window |
+| Output window | `OutputWindow.swift` | Split view: task list with status on the left, selected task's output on the right |
 
 The UI is plain AppKit, so the project builds with the Xcode Command Line Tools alone (SwiftUI macros require full Xcode).
 
@@ -127,8 +131,9 @@ HavenTask
 3. `ComposerPanel` appears with the captured context shown.
 4. User picks an agent, types an instruction, presses Return.
 5. `TaskStore` builds a prompt (instruction, app name, selected text) and spawns the agent CLI through a login shell.
-6. The composer closes. The task runs in the background; status is visible in the menu-bar menu.
-7. On exit, the task becomes `done` (exit code 0) or `failed`, and its output is stored on the task.
+6. The composer closes. The task runs in the background; the status pill shows the running count and the menu lists recent tasks.
+7. Clicking the pill (or **Show Tasks…** in the menu) opens the output window.
+8. On exit, the task becomes `done` (exit code 0) or `failed`, and its output is stored on the task.
 
 ## Security Model
 
@@ -164,7 +169,7 @@ Work lands on `design` or `features` and reaches `main` only through a pull requ
 
 ## Roadmap
 
-1. **Task output viewer** and notch / floating status pill.
+1. **Live output streaming** and notch-integrated status UI (output is currently shown once a task finishes).
 2. **Chrome annotation mode**: select page elements, attach selector, text and region screenshot to a task. Integration with the `agentation-mcp` server is planned. Agentation is licensed under PolyForm Shield, so Haven will use its own capture layer and integrate only through the MCP interface.
 3. **Keychain secure fill** with Touch ID and an audit log.
 4. **Parallel task management**, Quick Actions and Workflows.
