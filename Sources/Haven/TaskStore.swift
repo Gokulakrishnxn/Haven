@@ -75,6 +75,8 @@ final class TaskStore: ObservableObject {
     /// Extra prompt text and environment for agents, supplied by the app (for example how to request a login).
     var loginNote: (() -> String?)?
     var helperDirectory: String?
+    /// Returns an MCP config file path for a Claude task, or nil.
+    var mcpConfigPath: ((UUID) -> String?)?
 
     /// Called on the main thread whenever a task is added, changes status, or produces output.
     var onChange: (() -> Void)?
@@ -113,7 +115,8 @@ final class TaskStore: ObservableObject {
             if let dir = helperDirectory { environment["HAVEN_HELPER_DIR"] = dir }
         }
         let request = AgentRequest(prompt: prompt, model: model, workingDirectory: Preferences.workingFolderURL,
-                                   environment: environment, allowedCommands: allowed)
+                                   environment: environment, allowedCommands: allowed,
+                                   mcpConfigPath: agent == .claudeCode ? mcpConfigPath?(task.id) : nil)
         let run = AgentRunner.launch(AgentRegistry.adapter(for: agent), request: request)
         task.run = run
         Task { @MainActor [weak self, weak task] in
