@@ -9,10 +9,15 @@ let package = Package(
         .target(name: "HavenCore", path: "Sources/HavenCore"),
         // Process supervision and agent adapters.
         .target(name: "HavenRuntime", dependencies: ["HavenCore"], path: "Sources/HavenRuntime"),
+        // Credentials, Touch ID approval, origin checks and the audit log.
+        .target(name: "HavenSecurity", dependencies: ["HavenCore", "HavenRuntime"], path: "Sources/HavenSecurity"),
         // SwiftUI components and screens. Depends only on domain types, never on processes.
         .target(name: "HavenUI", dependencies: ["HavenCore"], path: "Sources/HavenUI"),
         // The app.
-        .executableTarget(name: "Haven", dependencies: ["HavenCore", "HavenRuntime", "HavenUI"], path: "Sources/Haven", resources: [.process("Resources")]),
+        .executableTarget(name: "Haven", dependencies: ["HavenCore", "HavenRuntime", "HavenUI", "HavenSecurity"], path: "Sources/Haven", resources: [.process("Resources")]),
+        // Command-line helper agents run to request a secure fill. It never receives a credential value.
+        .executableTarget(name: "haven-vault", dependencies: ["HavenSecurity"], path: "Sources/HavenVault"),
+        .testTarget(name: "HavenSecurityTests", dependencies: ["HavenCore", "HavenRuntime", "HavenSecurity"], path: "Tests/HavenSecurityTests"),
         .testTarget(
             name: "HavenRuntimeTests",
             dependencies: ["HavenCore", "HavenRuntime"],

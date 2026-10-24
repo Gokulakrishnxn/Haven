@@ -29,8 +29,12 @@ public enum AgentRegistry {
 public enum AgentRunner {
     /// Launches the adapter's CLI through a login shell (so the user's PATH applies).
     public static func launch(_ adapter: AgentAdapter, request: AgentRequest) -> AgentRun {
-        launch(command: ["/bin/zsh", "-lc", "exec \"$0\" \"$@\"", adapter.executable] + adapter.arguments(for: request) + [request.prompt],
-               parser: adapter.makeParser(), request: request)
+        // `env` sets the task's variables; HAVEN_HELPER_DIR, if present, is put on PATH after the login shell has built it.
+        let script = "if [ -n \"$HAVEN_HELPER_DIR\" ]; then export PATH=\"$HAVEN_HELPER_DIR:$PATH\"; fi; exec \"$0\" \"$@\""
+        let env = request.environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+        return launch(command: ["/usr/bin/env"] + env + ["/bin/zsh", "-lc", script, adapter.executable]
+                        + adapter.arguments(for: request) + [request.prompt],
+                      parser: adapter.makeParser(), request: request)
     }
 
     /// Lower-level entry point, also used by tests with a stand-in command.

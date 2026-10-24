@@ -6,11 +6,13 @@ import HavenUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = TaskStore()
-    private let panel = ComposerPanel()
+    private let quickActions = QuickActionStore()
+    private lazy var vaultController = VaultController(store: store)
+    private lazy var panel = ComposerPanel(quickActions: quickActions)
     private var statusItem: NSStatusItem!
     private var composeKey: HotKey?
     private var annotateKey: HotKey?
-    private lazy var outputWindow = OutputWindow(store: store)
+    private lazy var outputWindow = OutputWindow(store: store, quickActions: quickActions)
     private lazy var notch = NotchPanel(
         onAsk: { [weak self] in self?.showComposer() },
         onAnnotate: { [weak self] in self?.toggleAnnotate() },
@@ -23,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return w
     }()
     private lazy var settings: SettingsWindow = {
-        let w = SettingsWindow(store: store)
+        let w = SettingsWindow(store: store, quickActions: quickActions, vault: vaultController)
         w.onChange = { [weak self] in
             guard let self else { return }
             self.notch.update(items: self.store.tasks.map(\.item))
@@ -31,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return w
     }()
+    private let selectionPopup = SelectionPopup()
     private let menuModel = MenuPanelModel()
     private let popover = NSPopover()
     private var annotateAppName: String?
@@ -50,8 +53,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         store.onChange = { [weak self] in
             guard let self else { return }
-            self.notch.update(items: self.store.tasks.map(\.item))
-            self.menuModel.items = self.store.tasks.map(\.item)
+            let items = self.store.tasks.map(\.item)
+            self.notch.update(items: items)
+            self.panel.sync(items: items)
+            self.menuModel.items = items
             if self.outputWindow.window?.isVisible == true { self.outputWindow.reload() }
         }
 
@@ -63,13 +68,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         panel.onAnnotate = { [weak self] in self?.toggleAnnotate() }
+        panel.onStop = { [weak self] id in
+            if let task = self?.store.tasks.first(where: { $0.id == id }) { self?.store.cancel(task) }
+        }
+        panel.onOpenTasks = { [weak self] in self?.showTasks() }
+        selectionPopup.quickActions = { [weak self] in self?.quickActions.actions ?? [] }
+        selectionPopup.onChat = { [weak self] context in self?.showComposer(with: context) }
+        selectionPopup.onRun = { [weak self] action, context in
+            guard let self else { return }
+            let agent = action?.agent ?? Preferences.defaultAgent
+            let model = action.map { $0.agent == nil ? Preferences.defaultModel : $0.model } ?? Preferences.defaultModel
+            self.store.start(agent: agent, model: agent == Preferences.defaultAgent ? model : nil,
+                             instruction: action?.prompt ?? "Explain this clearly and concisely.", context: context)
+        }
+        selectionPopup.start()
+        store.loginNote = { [weak self] in
+            (self?.vaultController.hasLogins ?? false) ? VaultController.agentNote : nil
+        }
+        store.helperDirectory = Bundle.main.executableURL?.deletingLastPathComponent().path
+        vaultController.start()
         notch.update(items: [])
         if !Preferences.onboarded { onboarding.show() }
 
         // Development aid: HAVEN_SHOW=composer|tasks|onboarding|settings opens that window at launch.
         // HAVEN_RUN="prompt" also starts a task with the default agent.
         if let prompt = ProcessInfo.processInfo.environment["HAVEN_RUN"] {
-            store.start(agent: Preferences.defaultAgent, instruction: prompt, context: TaskContext())
+            if ProcessInfo.processInfo.environment["HAVEN_SHOW"] == "composer" {
+                showComposer()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.panel.debugSubmit(prompt) }
+            } else {
+                store.start(agent: Preferences.defaultAgent, instruction: prompt, context: TaskContext())
+            }
         }
         // HAVEN_SNAP=dir writes a PNG of each visible Haven window after two seconds, then quits.
         if let dir = ProcessInfo.processInfo.environment["HAVEN_SNAP"] {
@@ -84,26 +113,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         }
+        // HAVEN_PROBE="x,y" prints what Annotate would see at that screen point (twice, 1.5 s apart), then quits.
+        if let probe = ProcessInfo.processInfo.environment["HAVEN_PROBE"]?.split(separator: ",").compactMap({ Double($0) }), probe.count == 2 {
+            let point = CGPoint(x: probe[0], y: probe[1])
+            ElementProbe.prepareVisibleApps()
+            for delay in [0.2, 1.7] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    let e = ElementProbe.element(at: point)
+                    print("probe@\(delay)s app=\(e?.app ?? "-") role=\(e?.role ?? "-") title=\(e?.title ?? "-") frame=\(e?.frame.map { "\($0)" } ?? "none")")
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { NSApp.terminate(nil) }
+        }
         switch ProcessInfo.processInfo.environment["HAVEN_SHOW"] {
-        case "composer": showComposer()
+        case "composer": if ProcessInfo.processInfo.environment["HAVEN_RUN"] == nil { showComposer() }
         case "tasks": outputWindow.show()
         case "onboarding": onboarding.show()
         case "settings": settings.show()
         case "panel": statusItemClicked()
         case "annotate": toggleAnnotate()
+        case "selection": selectionPopup.debugShow()
         default: break
         }
     }
 
     // MARK: Actions
 
-    @objc private func showComposer() {
+    @objc private func showComposer() { showComposer(with: nil) }
+
+    private func showComposer(with preset: TaskContext?) {
         guard !annotate.isActive else { return }
-        let context = ContextCapture.capture()
-        panel.present(context: context) { [store] agent, model, text, files in
+        let context = preset ?? ContextCapture.capture()
+        panel.present(context: context) { [store] submission in
             var ctx = context
-            ctx.files = files.map(\.path)
-            store.start(agent: agent, model: model, instruction: text, context: ctx)
+            ctx.selectedText = submission.selection
+            ctx.tab = submission.tab
+            ctx.files = submission.files.map(\.path)
+            return store.start(agent: submission.agent, model: submission.model, instruction: submission.text, context: ctx).id
         }
     }
 
@@ -126,6 +172,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showTasks() { outputWindow.show() }
     @objc private func showWelcome() { onboarding.show() }
     @objc private func showSettings() { settings.show() }
+    func applicationWillTerminate(_ notification: Notification) { vaultController.stop() }
+
     @objc private func quit() { NSApp.terminate(nil) }
 
     // MARK: Menu-bar panel

@@ -19,6 +19,7 @@ extension HavenTask {
     static func contextSummary(_ c: TaskContext) -> String {
         var parts: [String] = []
         if let app = c.appName { parts.append("From \(app)") }
+        if let tab = c.tab { parts.append(tab.title.isEmpty ? tab.url : tab.title) }
         if let t = c.selectedText { parts.append("“\(t.prefix(120))”") }
         if !c.files.isEmpty { parts.append(c.files.count == 1 ? "1 file" : "\(c.files.count) files") }
         if c.brief != nil { parts.append("With annotations") }

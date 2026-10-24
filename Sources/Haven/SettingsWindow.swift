@@ -2,10 +2,13 @@ import AppKit
 import SwiftUI
 import HavenCore
 import HavenUI
+import HavenSecurity
 
 /// Settings window hosting the SwiftUI preferences (profile, general, agents, shortcuts, privacy, about).
 final class SettingsWindow: NSWindowController {
     private let store: TaskStore
+    private let quickActions: QuickActionStore
+    private let vault: VaultController
     private let model = SettingsModel(displayName: Preferences.displayName, email: Preferences.email,
                                       agent: Preferences.defaultAgent, showPill: Preferences.showStatusPill,
                                       workingFolder: Preferences.workingFolder)
@@ -13,8 +16,10 @@ final class SettingsWindow: NSWindowController {
     private var loading = false
     var onChange: (() -> Void)?
 
-    init(store: TaskStore) {
+    init(store: TaskStore, quickActions: QuickActionStore, vault: VaultController) {
         self.store = store
+        self.quickActions = quickActions
+        self.vault = vault
         let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model)))
         window.title = "Haven Settings"
         window.styleMask = [.titled, .closable]
@@ -38,6 +43,26 @@ final class SettingsWindow: NSWindowController {
                 NSWorkspace.shared.open(url)
             }
         }
+        model.quickActions = quickActions.actions
+        model.onUpdateAction = { [weak self] action in self?.quickActions.update(action) }
+        model.onDeleteAction = { [weak self] id in
+            self?.quickActions.delete(id)
+            self?.model.quickActions = self?.quickActions.actions ?? []
+        }
+        model.onAddAction = { [weak self] in
+            self?.quickActions.add(QuickAction(name: "New action", prompt: ""))
+            self?.model.quickActions = self?.quickActions.actions ?? []
+        }
+        model.onAddCredential = { [weak self] label, site, username, password in
+            do { try self?.vault.vault.add(label: label, site: site, username: username, password: password) }
+            catch { NSLog("Could not save login: \(error)") }
+            self?.reloadVault()
+        }
+        model.onDeleteCredential = { [weak self] id in
+            self?.vault.vault.remove(id)
+            self?.reloadVault()
+        }
+        model.onRefreshAudit = { [weak self] in self?.reloadVault() }
         model.onClearHistory = { [weak self] in self?.store.clearFinished() }
         model.onOpenRepo = {
             if let url = URL(string: "https://github.com/Gokulakrishnxn/Haven") { NSWorkspace.shared.open(url) }
@@ -46,7 +71,17 @@ final class SettingsWindow: NSWindowController {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    private func reloadVault() {
+        model.credentials = vault.vault.all().map { CredentialRow(id: $0.id, label: $0.label, site: $0.site, username: $0.username) }
+        model.auditRows = vault.audit.entries().reversed().map {
+            AuditRow(id: $0.id, time: $0.time, credential: $0.credential, site: $0.site, task: $0.task,
+                     outcome: $0.outcome.rawValue, detail: $0.detail)
+        }
+        model.auditIntact = vault.audit.firstBrokenIndex() == nil
+    }
+
     func show() {
+        reloadVault()
         refresh()
         detectAgents()
         // Permissions are granted in System Settings; reflect them without reopening.
@@ -57,6 +92,7 @@ final class SettingsWindow: NSWindowController {
     }
 
     private func refresh() {
+        if model.quickActions != quickActions.actions { model.quickActions = quickActions.actions }
         model.accessibilityGranted = AXIsProcessTrusted()
         model.screenRecordingGranted = CGPreflightScreenCaptureAccess()
         model.taskCount = store.startedCount

@@ -29,3 +29,18 @@ public struct TaskItem: Identifiable, Equatable, Sendable {
 public func formatElapsed(_ t: TimeInterval) -> String {
     t < 60 ? "\(Int(t))s" : "\(Int(t) / 60)m \(Int(t) % 60)s"
 }
+
+public extension TaskItem {
+    /// One line describing what the agent is doing right now, for status cards.
+    var activity: String {
+        let last = output.split(separator: "\n").last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+            .map { String($0.trimmingCharacters(in: .whitespaces).prefix(90)) }
+        if let last { return last.hasPrefix("›") ? "Using \(last.dropFirst().trimmingCharacters(in: .whitespaces))" : last }
+        switch state {
+        case .working: return "Checking connected tools"
+        case .done: return "Finished"
+        case .failed: return "Something went wrong"
+        case .cancelled: return "Stopped"
+        }
+    }
+}

@@ -23,6 +23,7 @@ final class AnnotateController {
     func begin() {
         guard !isActive else { return }
         pins = []
+        ElementProbe.prepareVisibleApps()  // give web apps time to build their accessibility trees
         bar.text = ""
         bar.pins = []
         bar.agent = Preferences.defaultAgent

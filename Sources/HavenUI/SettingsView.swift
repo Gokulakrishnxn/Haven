@@ -2,7 +2,8 @@ import SwiftUI
 import HavenCore
 
 public enum SettingsSection: String, CaseIterable, Identifiable {
-    case profile = "Profile", general = "General", agents = "Agents"
+    case profile = "Profile", general = "General", agents = "Agents", quickActions = "Quick Actions"
+    case logins = "Logins", audit = "Audit Log"
     case shortcuts = "Shortcuts", privacy = "Privacy", about = "About"
 
     public var id: String { rawValue }
@@ -12,10 +13,38 @@ public enum SettingsSection: String, CaseIterable, Identifiable {
         case .profile: return "person.crop.circle"
         case .general: return "gearshape"
         case .agents: return "sparkles"
+        case .quickActions: return "bolt"
+        case .logins: return "key"
+        case .audit: return "list.bullet.rectangle"
         case .shortcuts: return "command"
         case .privacy: return "hand.raised"
         case .about: return "info.circle"
         }
+    }
+}
+
+/// A saved login as the UI sees it. The password is never part of this.
+public struct CredentialRow: Identifiable, Equatable {
+    public let id: UUID
+    public var label: String
+    public var site: String
+    public var username: String
+    public init(id: UUID, label: String, site: String, username: String) {
+        self.id = id; self.label = label; self.site = site; self.username = username
+    }
+}
+
+public struct AuditRow: Identifiable, Equatable {
+    public let id: String
+    public var time: Date
+    public var credential: String
+    public var site: String
+    public var task: String
+    public var outcome: String
+    public var detail: String
+    public init(id: String, time: Date, credential: String, site: String, task: String, outcome: String, detail: String) {
+        self.id = id; self.time = time; self.credential = credential; self.site = site
+        self.task = task; self.outcome = outcome; self.detail = detail
     }
 }
 
@@ -37,6 +66,11 @@ public final class SettingsModel: ObservableObject {
     @Published public var accessibilityGranted = false
     @Published public var screenRecordingGranted = false
     @Published public var taskCount = 0
+    @Published public var quickActions: [QuickAction] = []
+    @Published public var credentials: [CredentialRow] = []
+    @Published public var auditRows: [AuditRow] = []
+    /// False if the audit log's hash chain no longer verifies.
+    @Published public var auditIntact = true
     @Published public var version = "0.1.0"
 
     public var onChange: () -> Void = {}
@@ -46,6 +80,12 @@ public final class SettingsModel: ObservableObject {
     public var onOpenScreenRecording: () -> Void = {}
     public var onClearHistory: () -> Void = {}
     public var onOpenRepo: () -> Void = {}
+    public var onUpdateAction: (QuickAction) -> Void = { _ in }
+    public var onDeleteAction: (UUID) -> Void = { _ in }
+    public var onAddAction: () -> Void = {}
+    public var onAddCredential: (_ label: String, _ site: String, _ username: String, _ password: String) -> Void = { _, _, _, _ in }
+    public var onDeleteCredential: (UUID) -> Void = { _ in }
+    public var onRefreshAudit: () -> Void = {}
 
     public init(displayName: String, email: String, agent: Agent, showPill: Bool, workingFolder: String) {
         self.displayName = displayName
@@ -67,6 +107,8 @@ public struct SettingsView: View {
                 Label(s.rawValue, systemImage: s.icon).tag(s)
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(Color(white: 0.04))
             .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 200)
         } detail: {
             Group {
@@ -74,15 +116,22 @@ public struct SettingsView: View {
                 case .profile: ProfilePane(model: model)
                 case .general: GeneralPane(model: model)
                 case .agents: AgentsPane(model: model)
+                case .quickActions: QuickActionsPane(model: model)
+                case .logins: LoginsPane(model: model)
+                case .audit: AuditPane(model: model)
                 case .shortcuts: ShortcutsPane()
                 case .privacy: PrivacyPane(model: model)
                 case .about: AboutPane(model: model)
                 }
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .background(HavenTheme.canvas)
             .navigationTitle(model.section.rawValue)
         }
-        .frame(width: 700, height: 480)
+        .frame(width: 700, height: 560)
+        .background(HavenTheme.canvas)
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -171,6 +220,10 @@ struct AgentsPane: View {
                 } else {
                     HStack { ProgressView().controlSize(.small); Text("Looking for agents…") }
                 }
+            }
+            Section("Models") {
+                LabeledContent("Your agents") { Label("Free, uses your own subscriptions", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.callout) }
+                LabeledContent("Haven-hosted credits") { Text("Not available yet").foregroundStyle(.secondary) }
             }
             Section {
                 Button("Check Again", action: model.onRecheckAgents)
@@ -265,5 +318,189 @@ struct AboutPane: View {
                 Button("View on GitHub", action: model.onOpenRepo)
             }
         }
+    }
+}
+
+struct QuickActionsPane: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        Form {
+            if model.quickActions.isEmpty {
+                Section {
+                    VStack(spacing: 6) {
+                        Image(systemName: "bolt").font(.system(size: 28)).foregroundStyle(.tertiary)
+                        Text("No Quick Actions yet").font(.headline)
+                        Text("Save a prompt that worked, then rerun it in one step from the composer.")
+                            .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                }
+            }
+            ForEach(model.quickActions) { action in
+                Section {
+                    ActionEditor(action: action,
+                                 onChange: model.onUpdateAction,
+                                 onDelete: { model.onDeleteAction(action.id) })
+                }
+            }
+            Section {
+                Button { model.onAddAction() } label: { Label("New Quick Action", systemImage: "plus") }
+            }
+        }
+    }
+}
+
+/// Edits one action. Keeps its own draft and writes through on every change.
+final class ActionDraft: ObservableObject {
+    @Published var action: QuickAction
+    init(_ action: QuickAction) { self.action = action }
+}
+
+struct ActionEditor: View {
+    @StateObject private var draft: ActionDraft
+    let onChange: (QuickAction) -> Void
+    let onDelete: () -> Void
+
+    init(action: QuickAction, onChange: @escaping (QuickAction) -> Void, onDelete: @escaping () -> Void) {
+        _draft = StateObject(wrappedValue: ActionDraft(action))
+        self.onChange = onChange
+        self.onDelete = onDelete
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "bolt.fill").foregroundStyle(.tint)
+                TextField("Name", text: bind(\.name)).textFieldStyle(.plain).font(.headline)
+                Spacer()
+                Button(role: .destructive, action: onDelete) { Image(systemName: "trash") }.buttonStyle(.borderless)
+            }
+            TextField("Prompt", text: bind(\.prompt), axis: .vertical).lineLimit(2...6)
+            HStack {
+                Picker("Agent", selection: Binding(get: { draft.action.agent }, set: { draft.action.agent = $0; draft.action.model = nil; onChange(draft.action) })) {
+                    Text("Default").tag(Agent?.none)
+                    ForEach(Agent.allCases) { Text($0.displayName).tag(Agent?.some($0)) }
+                }
+                if let agent = draft.action.agent, agent.models.count > 1 {
+                    Picker("Model", selection: Binding(get: { draft.action.model }, set: { draft.action.model = $0; onChange(draft.action) })) {
+                        ForEach(agent.models) { Text($0.name).tag($0.id) }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func bind(_ keyPath: WritableKeyPath<QuickAction, String>) -> Binding<String> {
+        Binding(get: { draft.action[keyPath: keyPath] }, set: { draft.action[keyPath: keyPath] = $0; onChange(draft.action) })
+    }
+}
+
+// MARK: Logins and audit
+
+final class NewCredentialDraft: ObservableObject {
+    @Published var label = ""
+    @Published var site = ""
+    @Published var username = ""
+    @Published var password = ""
+
+    var isValid: Bool { !label.isEmpty && !site.isEmpty && !password.isEmpty }
+    func clear() { label = ""; site = ""; username = ""; password = "" }
+}
+
+struct LoginsPane: View {
+    @ObservedObject var model: SettingsModel
+    @StateObject private var draft = NewCredentialDraft()
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 12) {
+                    Image(systemName: "touchid").font(.system(size: 26)).foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Agents can use logins without seeing them").font(.headline)
+                        Text("Passwords are kept in your Keychain. An agent can only ask Haven to fill a login; you approve each use with Touch ID, and the value never reaches the model.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            Section("Saved logins") {
+                if model.credentials.isEmpty {
+                    Text("No saved logins yet.").foregroundStyle(.secondary)
+                }
+                ForEach(model.credentials) { c in
+                    HStack(spacing: 10) {
+                        Image(systemName: "key.fill").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(c.label)
+                            Text(c.username.isEmpty ? c.site : "\(c.username) · \(c.site)").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(role: .destructive) { model.onDeleteCredential(c.id) } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                            .help("Remove this login and its saved password")
+                    }
+                }
+            }
+            Section("Add a login") {
+                TextField("Name", text: $draft.label, prompt: Text("GitHub"))
+                TextField("Website", text: $draft.site, prompt: Text("github.com"))
+                TextField("Username", text: $draft.username)
+                SecureField("Password", text: $draft.password)
+                Button("Save to Keychain") {
+                    model.onAddCredential(draft.label, draft.site, draft.username, draft.password)
+                    draft.clear()
+                }
+                .disabled(!draft.isValid)
+                Text("Haven will only fill this login on an https page whose address is exactly this website.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct AuditPane: View {
+    @ObservedObject var model: SettingsModel
+
+    private static let format: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yy-MM-dd HH:mm"; return f
+    }()
+
+    var body: some View {
+        Form {
+            Section {
+                if model.auditIntact {
+                    Label("Log verified: no entry has been altered or removed", systemImage: "checkmark.shield.fill").foregroundStyle(.green)
+                } else {
+                    Label("This log was changed outside Haven", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                }
+            }
+            Section("Credential access") {
+                if model.auditRows.isEmpty { Text("No credential has been used yet.").foregroundStyle(.secondary) }
+                ForEach(model.auditRows) { row in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
+                            Image(systemName: icon(row.outcome)).foregroundStyle(color(row.outcome))
+                            Text(row.site).font(.system(size: 13, design: .monospaced))
+                            Spacer()
+                            Text(Self.format.string(from: row.time)).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                        }
+                        Text("\(row.credential) · \(row.task)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        if !row.detail.isEmpty { Text(row.detail).font(.caption).foregroundStyle(.tertiary) }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            Section { Button("Refresh", action: model.onRefreshAudit) }
+        }
+    }
+
+    private func icon(_ outcome: String) -> String {
+        switch outcome { case "approved": return "checkmark.circle.fill"; case "denied": return "hand.raised.fill"; default: return "xmark.octagon.fill" }
+    }
+    private func color(_ outcome: String) -> Color {
+        switch outcome { case "approved": return .green; case "denied": return .orange; default: return .red }
     }
 }

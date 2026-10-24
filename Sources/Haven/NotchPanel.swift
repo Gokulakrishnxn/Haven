@@ -25,7 +25,7 @@ final class NotchPanel: NSPanel {
         model.onAsk = onAsk
         model.onAnnotate = onAnnotate
         model.onShowTasks = onShowTasks
-        model.notchWidth = Self.notchWidth(of: NSScreen.main)
+        applyScreenGeometry()
 
         let host = NSHostingController(rootView: NotchView(model: model))
         host.sizingOptions = [.preferredContentSize]  // grows when expanded
@@ -39,10 +39,16 @@ final class NotchPanel: NSPanel {
 
     deinit { resizeObserver.map(NotificationCenter.default.removeObserver) }
 
-    /// Width of the physical notch, or a default on Macs without one.
-    static func notchWidth(of screen: NSScreen?) -> CGFloat {
-        guard let screen, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return 150 }
+    /// Width of the physical notch, or nil on a screen without one.
+    static func notchWidth(of screen: NSScreen?) -> CGFloat? {
+        guard let screen, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return nil }
         return max(100, screen.frame.width - left.width - right.width)
+    }
+
+    private func applyScreenGeometry() {
+        let width = Self.notchWidth(of: NSScreen.main)
+        model.hasNotch = width != nil
+        if let width { model.notchWidth = width }
     }
 
     func update(items: [TaskItem]) {
@@ -50,7 +56,7 @@ final class NotchPanel: NSPanel {
         model.items = items
         // Development aid: HAVEN_NOTCH_EXPANDED=1 opens the notch at launch.
         if ProcessInfo.processInfo.environment["HAVEN_NOTCH_EXPANDED"] != nil { model.expanded = true }
-        model.notchWidth = Self.notchWidth(of: NSScreen.main)
+        applyScreenGeometry()
         anchorToTop()
         orderFrontRegardless()
     }

@@ -8,6 +8,7 @@ public final class TaskCenterModel: ObservableObject {
     public var onCancel: (UUID) -> Void = { _ in }
     public var onRerun: (UUID) -> Void = { _ in }
     public var onClearFinished: () -> Void = {}
+    public var onSaveAction: (UUID) -> Void = { _ in }
 
     public init() {}
 
@@ -26,12 +27,15 @@ public struct TaskCenterView: View {
             if let task = model.selected {
                 TaskDetailView(task: task,
                                onCancel: { model.onCancel(task.id) },
-                               onRerun: { model.onRerun(task.id) })
+                               onRerun: { model.onRerun(task.id) },
+                               onSaveAction: { model.onSaveAction(task.id) })
             } else {
                 EmptyState()
             }
         }
         .frame(minWidth: 760, minHeight: 440)
+        .background(HavenTheme.canvas)
+        .preferredColorScheme(.dark)
     }
 
     private var sidebar: some View {
@@ -41,6 +45,8 @@ public struct TaskCenterView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color(white: 0.04))
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Clear Finished", action: model.onClearFinished)
@@ -78,36 +84,49 @@ struct TaskDetailView: View {
     let task: TaskItem
     let onCancel: () -> Void
     let onRerun: () -> Void
+    let onSaveAction: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(task.title).font(.title3.weight(.semibold)).lineLimit(2)
-                    Spacer()
-                    if task.state == .working {
-                        Button("Cancel", action: onCancel).keyboardShortcut(".", modifiers: .command)
-                    } else {
-                        Button("Run Again", action: onRerun).keyboardShortcut("r", modifiers: .command)
-                    }
-                }
-                HStack(spacing: 8) {
-                    AgentIcon(task.agent, size: 16)
-                    StatusDot(task.state)
+        VStack(alignment: .leading, spacing: 12) {
+            // Status card, like the one above the composer.
+            HStack(spacing: 12) {
+                WorkingMark(working: task.state == .working, size: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title).font(.system(size: 14, weight: .semibold)).lineLimit(2)
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
                         Text("\(task.agent.displayName) · \(task.state.rawValue) · \(formatElapsed(task.elapsed(at: ctx.date)))")
+                            .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                    }
+                    if !task.context.isEmpty {
+                        Text(task.context).font(.system(size: 11)).foregroundStyle(.white.opacity(0.4)).lineLimit(2)
                     }
                 }
-                .font(.callout).foregroundStyle(.secondary)
-                if !task.context.isEmpty {
-                    Text(task.context).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                Spacer(minLength: 8)
+                if task.state == .working {
+                    Button(action: onCancel) { Image(systemName: "stop.fill").font(.system(size: 10)) }
+                        .buttonStyle(RoundActionStyle(fill: Color(red: 0.96, green: 0.36, blue: 0.36)))
+                        .keyboardShortcut(".", modifiers: .command)
+                        .help("Stop")
+                } else {
+                    Button(action: onSaveAction) { Image(systemName: "bolt").font(.system(size: 11)) }
+                        .buttonStyle(RoundActionStyle(fill: Color.white.opacity(0.12)))
+                        .help("Save as Quick Action")
+                    Button(action: onRerun) { Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold)) }
+                        .buttonStyle(RoundActionStyle(fill: .white, foreground: .black))
+                        .keyboardShortcut("r", modifiers: .command)
+                        .help("Run again")
                 }
             }
-            .padding(20)
+            .padding(14)
+            .background(HavenTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(HavenTheme.hairline))
 
-            Divider()
             OutputView(text: task.output, working: task.state == .working)
+                .background(HavenTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(HavenTheme.hairline))
         }
+        .padding(16)
+        .padding(.top, 14)
         .navigationTitle("")
     }
 }

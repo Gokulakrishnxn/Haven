@@ -5,10 +5,12 @@ import HavenUI
 /// Task Center window hosting the SwiftUI split view.
 final class OutputWindow: NSWindowController {
     private let store: TaskStore
+    private let quickActions: QuickActionStore
     private let model = TaskCenterModel()
 
-    init(store: TaskStore) {
+    init(store: TaskStore, quickActions: QuickActionStore) {
         self.store = store
+        self.quickActions = quickActions
         let window = NSWindow(contentViewController: NSHostingController(rootView: TaskCenterView(model: model)))
         window.title = "Tasks"
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView]
@@ -21,6 +23,11 @@ final class OutputWindow: NSWindowController {
         model.onCancel = { [weak self] id in self?.task(id).map { self?.store.cancel($0) } }
         model.onRerun = { [weak self] id in self?.task(id).map { self?.store.rerun($0) } }
         model.onClearFinished = { [weak self] in self?.store.clearFinished() }
+        model.onSaveAction = { [weak self] id in
+            guard let self, let task = self.task(id) else { return }
+            self.quickActions.saveWithPrompt(prompt: task.instruction, agent: task.agent, model: task.model,
+                                             suggestedName: QuickActionStore.suggestedName(for: task.instruction))
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
