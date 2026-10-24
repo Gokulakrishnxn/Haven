@@ -5,8 +5,10 @@ import ApplicationServices
 struct TaskContext {
     var appName: String?
     var selectedText: String?
+    /// Markdown brief built from Annotate-mode pins.
+    var brief: String?
 
-    var isEmpty: Bool { appName == nil && selectedText == nil }
+    var isEmpty: Bool { appName == nil && selectedText == nil && brief == nil }
 }
 
 enum ContextCapture {
