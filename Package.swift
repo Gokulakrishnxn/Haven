@@ -16,7 +16,7 @@ let package = Package(
         // The app.
         .executableTarget(name: "Haven", dependencies: ["HavenCore", "HavenRuntime", "HavenUI", "HavenSecurity"], path: "Sources/Haven", resources: [.process("Resources")]),
         // Command-line helper agents run to request a secure fill. It never receives a credential value.
-        .executableTarget(name: "haven-vault", path: "Sources/HavenVault"),
+        .executableTarget(name: "haven-vault", dependencies: ["HavenSecurity"], path: "Sources/HavenVault"),
         .testTarget(name: "HavenSecurityTests", dependencies: ["HavenCore", "HavenRuntime", "HavenSecurity"], path: "Tests/HavenSecurityTests"),
         .testTarget(
             name: "HavenRuntimeTests",
