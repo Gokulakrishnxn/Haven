@@ -48,6 +48,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         if !Preferences.onboarded { onboarding.show() }
+
+        // Development aid: HAVEN_SHOW=composer|tasks|onboarding|settings opens that window at launch.
+        // HAVEN_RUN="prompt" also starts a task with the default agent.
+        if let prompt = ProcessInfo.processInfo.environment["HAVEN_RUN"] {
+            store.start(agent: Preferences.defaultAgent, instruction: prompt, context: TaskContext())
+        }
+        switch ProcessInfo.processInfo.environment["HAVEN_SHOW"] {
+        case "composer": showComposer()
+        case "tasks": outputWindow.show()
+        case "onboarding": onboarding.show()
+        case "settings": settings.show()
+        default: break
+        }
     }
 
     // MARK: Actions

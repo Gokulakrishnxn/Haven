@@ -9,8 +9,10 @@ let package = Package(
         .target(name: "HavenCore", path: "Sources/HavenCore"),
         // Process supervision and agent adapters.
         .target(name: "HavenRuntime", dependencies: ["HavenCore"], path: "Sources/HavenRuntime"),
+        // SwiftUI components and screens. Depends only on domain types, never on processes.
+        .target(name: "HavenUI", dependencies: ["HavenCore"], path: "Sources/HavenUI"),
         // The app.
-        .executableTarget(name: "Haven", dependencies: ["HavenCore", "HavenRuntime"], path: "Sources/Haven"),
+        .executableTarget(name: "Haven", dependencies: ["HavenCore", "HavenRuntime", "HavenUI"], path: "Sources/Haven"),
         .testTarget(
             name: "HavenRuntimeTests",
             dependencies: ["HavenCore", "HavenRuntime"],

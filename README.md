@@ -44,7 +44,7 @@ This repository is an early scaffold. Items below are marked by what exists toda
 | Structured events from Claude Code (`stream-json`), process-group cancel and timeout | Implemented, with tests |
 | Structured events from Codex and Grok | Planned (plain text for now) |
 | Status pill (running count, last result) | Implemented |
-| Task Center (sidebar, header actions, live output) | Implemented |
+| Task Center (SwiftUI split view, header actions, live output) | Implemented |
 | Annotate mode: hover highlight, element and region pins, notes, brief | Implemented (element identity needs Accessibility; no screenshot yet) |
 | Onboarding, agent detection, Settings | Implemented |
 | Chrome extension for DOM selectors | Planned |
@@ -103,13 +103,14 @@ This repository is an early scaffold. Items below are marked by what exists toda
 
 ## Component Reference
 
-The package is split into three targets plus tests.
+The package is split into four targets plus tests.
 
 | Target | Path | Responsibility |
 |---|---|---|
 | `HavenCore` | `Sources/HavenCore/` | Pure domain types: `Agent`, `TaskContext`, `TaskEvent`, `Outcome`, `AgentRequest`, `Pin`, `BriefBuilder`. No I/O. |
 | `HavenRuntime` | `Sources/HavenRuntime/` | `ProcessSupervisor` (process groups, cancel, timeout), `AgentAdapter` and output parsers, `ClaudeCodeAdapter` (structured `stream-json`), `AgentRunner`, `AgentRegistry` |
-| `Haven` | `Sources/Haven/` | The app: UI, hotkeys, context capture, task store |
+| `HavenUI` | `Sources/HavenUI/` | SwiftUI components and screens (composer, status pill, Task Center, onboarding, settings). Depends only on `HavenCore`; screens render plain data and call closures, so they never touch processes |
+| `Haven` | `Sources/Haven/` | The app shell: hotkeys, context capture, Annotate overlay (AppKit), task store, and AppKit hosts for the SwiftUI screens |
 | `HavenRuntimeTests` | `Tests/HavenRuntimeTests/` | Parser contract tests against a recorded Claude Code run, and supervisor tests |
 
 App components in `Sources/Haven/`:
@@ -128,7 +129,11 @@ App components in `Sources/Haven/`:
 | Status pill | `StatusPill.swift` | Non-activating floating pill at top-center showing running count or last result; click opens the output window |
 | Task Center | `OutputWindow.swift` | Source-list sidebar of tasks, header with status, elapsed time and Cancel or Run Again, and live output |
 
-The UI is plain AppKit, so the project builds with the Xcode Command Line Tools alone (SwiftUI macros require full Xcode).
+Screens are SwiftUI, hosted in AppKit panels and windows. The shell stays AppKit where SwiftUI cannot do the job (borderless non-activating panels, global hotkeys, the full-screen Annotate overlay).
+
+**Building without Xcode:** the SDK in use declares `@State` as a macro whose plugin ships only with full Xcode, so it fails under the Command Line Tools. The UI therefore uses `ObservableObject` view models with `@ObservedObject`, `@StateObject` and `@FocusState`, which compile with the Command Line Tools. Avoid `@State` and `@Observable` until the project requires full Xcode.
+
+Development aid: launch with `HAVEN_SHOW=composer|tasks|onboarding|settings` to open a window at start, and `HAVEN_RUN="prompt"` to start a task with the default agent.
 
 ### Annotate flow
 
