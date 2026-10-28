@@ -39,7 +39,13 @@ private final class FakeExtension: @unchecked Sendable {
     }
 }
 
-private func freePort() -> UInt16 { UInt16.random(in: 50_000...59_000) }
+/// Each test gets its own port, handed out in sequence so parallel tests never share one. The range sits below the
+/// ephemeral port range (49152 and up) so a test client never picks the same number.
+private let portLock = NSLock()
+nonisolated(unsafe) private var nextTestPort = UInt16.random(in: 20_000...28_000)
+private func freePort() -> UInt16 {
+    portLock.withLock { nextTestPort += 1; return nextTestPort }
+}
 
 private func waitUntil(_ timeout: TimeInterval = 3, _ condition: () -> Bool) async -> Bool {
     let end = Date().addingTimeInterval(timeout)

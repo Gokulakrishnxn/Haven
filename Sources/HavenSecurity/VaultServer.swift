@@ -52,7 +52,7 @@ public final class VaultServer: @unchecked Sendable {
             if n <= 0 { break }
             data.append(contentsOf: buffer[0..<n])
         }
-        let line = data.split(separator: 0x0A, maxSplits: 1).first.map(Data.init) ?? Data()
+        let line = data.firstLine
 
         let response: WireResponse
         if let request = try? JSONDecoder().decode(WireRequest.self, from: line), ["login", "approve", "mac", "browser"].contains(request.action) {
